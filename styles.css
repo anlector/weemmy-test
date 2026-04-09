@@ -55,7 +55,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto
 .tbl thead th { text-align:left; padding:10px 14px; border-bottom:2px solid #e5e7eb; border-right:1px solid #e5e7eb; color:var(--text-dim); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; user-select:none; }
 .tbl thead th:last-child { border-right:none; }
 .tbl thead th:hover { color:var(--text); }
-.tbl tbody td { padding:10px 14px; border-bottom:1px solid #f3f4f6; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:0; }
+.tbl tbody td { padding:10px 14px; border-bottom:1px solid #e5e7eb; border-right:1px solid #e5e7eb; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:0; }
+.tbl tbody td:last-child { border-right:none; }
 .tbl tbody tr { cursor:pointer; transition:background 0.15s; }
 .tbl tbody tr:hover { background:#f0f4ff; }
 
@@ -214,12 +215,15 @@ a.xlink:hover { text-decoration:underline; }
 .tp-table { width:100%; border-collapse: collapse; font-size:12px; table-layout:auto; }
 .tp-table thead th { padding:8px 10px; text-align:left; border-bottom:2px solid #e5e7eb; border-right:1px solid #e5e7eb; font-size:10px; text-transform:uppercase; color:var(--text-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; position:sticky; top:0; background:var(--bg); z-index:1; }
 .tp-table thead th:last-child { border-right:none; }
-.tp-table tbody td { padding:8px 10px; border-bottom:1px solid #f3f4f6; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:0; }
+.tp-table tbody td { padding:8px 10px; border-bottom:1px solid #e5e7eb; border-right:1px solid #e5e7eb; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:0; }
+.tp-table tbody td:last-child { border-right:none; }
 .tp-table tbody tr { border-left:4px solid transparent; }
 .tp-table tbody tr.click { border-left-color:var(--blue); }
 .tp-table tbody tr.conv { border-left-color:var(--orange); }
 .tp-table tbody tr.order { border-left-color:var(--green); }
 .tp-table tbody tr:hover { background:#f0f4ff; }
+.tp-table tbody td.col-highlight { background:#f0f4ff; }
+.tbl tbody td.col-highlight { background:#f0f4ff; }
 
 /* Journey path separator */
 .jp-sep { text-align:center; margin:20px 0 12px; padding:8px; background:#f9fafb; border-radius:6px; font-size:12px; color:var(--text-dim); font-weight:600; }

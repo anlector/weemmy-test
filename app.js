@@ -1221,7 +1221,83 @@ class Dashboard {
         this.showTpFieldConfigurator(fp, index);
     }
 
-    // Side panel: customer profile + order cards + all touchpoints across all fingerprints
+    // Renders <tbody> rows for the customer orders table (used by showCustomer + date sort toggle)
+    _renderCustomerOrdersBody(orders, sortDir) {
+        const sorted = [...orders].sort((a, b) => {
+            const da = this.parseDate(a.dt);
+            const db = this.parseDate(b.dt);
+            if (da && db) return sortDir === 'asc' ? da - db : db - da;
+            if (da) return -1;
+            if (db) return 1;
+            return 0;
+        });
+        let html = '';
+        sorted.forEach((o, i) => {
+            const stBadge = o.st === 'FULFILLED' ? 'badge-green' : o.st === 'PENDING' ? 'badge-orange' : 'badge-grey';
+            const oidLink = `<a class="xlink" onclick="event.stopPropagation();D.navigateToOrder('${o.oid}')">#${o.oid}</a>`;
+            html += `<tr style="cursor:pointer;" onclick="D.showOrder('${o.oid}')">
+                <td>${i + 1}</td>
+                <td>${oidLink}</td>
+                <td style="white-space:nowrap;">${this.fmtDate(o.dt)}</td>
+                <td><strong>$${(o.pr || 0).toFixed(2)}</strong></td>
+                <td><span class="badge ${stBadge}">${o.st || 'N/A'}</span></td>
+                <td>${o.rcmp || ''}</td>
+                <td>${o.fsrc || ''}</td>
+                <td>${o.lsrc || ''}</td>
+                <td>${o.app || ''}</td>
+                <td>${o.ci || ''}</td>
+                <td>${o.co || ''}</td>
+                <td>${o.cur || ''}</td>
+            </tr>`;
+        });
+        return html;
+    }
+
+    // Renders <tbody> rows for the customer touchpoints table (used by showCustomer + date sort toggle)
+    _renderCustomerTouchpointsBody(allTouchpoints, sortDir) {
+        const sorted = [...allTouchpoints].sort((a, b) => {
+            const da = this.parseDate(a.dt);
+            const db = this.parseDate(b.dt);
+            if (da && db) return sortDir === 'asc' ? da - db : db - da;
+            if (da) return -1;
+            if (db) return 1;
+            return 0;
+        });
+        const fpCounters = {};
+        sorted.forEach(r => {
+            if (!(r._fp in fpCounters)) fpCounters[r._fp] = 0;
+            r._fpIdx = fpCounters[r._fp]++;
+        });
+        let html = '';
+        sorted.forEach((r, i) => {
+            const type = r.t === 'c' ? 'click' : r.t === 'v' ? 'conv' : 'order';
+            const typeBadge = r.t === 'c' ? '<span class="badge badge-blue">CLICK</span>'
+                : r.t === 'v' ? '<span class="badge badge-orange">CONV</span>'
+                : '<span class="badge badge-green">ORDER</span>';
+            const ip = r.click_ip || r.conversion_ip || r.order_ip || r.ip || '';
+            const payout = r.t === 'v' && r.pay != null && r.pay !== '' ? `$${Number(r.pay).toFixed(2)}` : '';
+            const value = r.t === 'o' && r.pr != null && r.pr !== '' ? `$${Number(r.pr).toFixed(2)}` : '';
+            const stBadge = r.t === 'o' ? (() => { const b = r.st === 'FULFILLED' ? 'badge-green' : r.st === 'PENDING' ? 'badge-orange' : 'badge-grey'; return `<span class="badge ${b}">${r.st || 'N/A'}</span>`; })() : '';
+            const source = r.src || r.fsrc || '';
+            const campaign = r.t === 'o' ? (r.rcmp || r.cmp || '') : (r.cmp || '');
+            const adGroup = r.adg || r.s1 || '';
+            const oidLink = r.oid ? `<a class="xlink" onclick="event.stopPropagation();D.navigateToOrder('${r.oid}')">#${r.oid}</a>` : '';
+            const fpLink = r._fp ? `<a class="xlink" onclick="event.stopPropagation();D.showJourneyPathsTable('${r._fp}')" style="font-size:11px;">${r._fp.substring(0, 10)}…</a>` : '';
+            html += `<tr class="${type}" style="cursor:pointer;" onclick="D.showTouchpoint('${r._fp}',${r._fpIdx})">
+                <td>${i + 1}</td><td>${typeBadge}</td><td>${r.vt || ''}</td><td style="white-space:nowrap;">${this.fmtDate(r.dt)}</td>
+                <td>${fpLink}</td>
+                <td>${source}</td><td>${campaign}</td><td>${adGroup}</td>
+                <td>${r.s4 || ''}</td>
+                <td>${r.dev || ''}</td><td>${r.br || ''}</td><td>${r.os || ''}</td>
+                <td>${r.co || ''}</td><td>${r.ci || ''}</td><td>${ip}</td>
+                <td>${oidLink}</td><td>${r.nm || ''}</td>
+                <td>${payout}</td><td>${value}</td><td>${stBadge}</td>
+            </tr>`;
+        });
+        return html;
+    }
+
+    // Side panel: customer profile + orders table + all touchpoints across all fingerprints
     showCustomer(cid) {
         const cust = this.customers.find(c=>c.cid===cid);
         if(!cust) return;
@@ -1239,19 +1315,20 @@ class Dashboard {
         html += this.dlRow('Last Seen',this.fmtDate(cust.lastSeen));
         html += '</dl></div>';
 
-        // Order summary cards
-        html += '<div class="detail-sub">Orders</div>';
-        cust.orders.forEach(o => {
-            const stBadge = o.st==='FULFILLED'?'badge-green':o.st==='PENDING'?'badge-orange':'badge-grey';
-            const oidLink = `<a class="xlink" onclick="D.navigateToOrder('${o.oid}')">#${o.oid}</a>`;
-            html += `<div class="cust-card"><dl class="cust-grid">
-                ${this.dlRow('Order ID',oidLink)}
-                ${this.dlRow('Date',this.fmtDate(o.dt))}
-                ${this.dlRow('Value','$'+(o.pr||0).toFixed(2))}
-                ${this.dlRow('Status','<span class=\'badge '+stBadge+'\'>'+o.st+'</span>')}
-                ${this.dlRow('Campaign',o.rcmp)}
-            </dl></div>`;
-        });
+        // Orders table
+        html += `<div class="detail-sub">Orders (${cust.orders.length})</div>`;
+        html += `<div style="overflow-x:auto;">
+            <table class="tp-table">
+                <thead>
+                    <tr>
+                        <th>#</th><th>Order ID</th><th style="cursor:pointer;" id="cust-orders-date-th" class="sort-asc">Date ↑</th><th>Value</th><th>Status</th>
+                        <th>Campaign</th><th>First Source</th><th>Last Source</th>
+                        <th>App</th><th>City</th><th>Country</th><th>Currency</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+        html += this._renderCustomerOrdersBody(cust.orders, 'asc');
+        html += `</tbody></table></div>`;
 
         html += '<div class="detail-sub">Full Journey — All Touchpoints</div>';
 
@@ -1260,60 +1337,50 @@ class Dashboard {
             const tp = this.raw.filter(r => r.fp === fp);
             tp.forEach(r => allTp.push({ ...r, _fp: fp }));
         });
-        allTp.sort((a, b) => this.compareDates(a.dt, b.dt));
 
         html += `<div style="overflow-x:auto;">
             <table class="tp-table">
                 <thead>
                     <tr>
-                        <th>#</th><th>Type</th><th>Conv. Type</th><th>Date</th><th>Fingerprint</th><th>Source</th><th>Campaign</th>
+                        <th>#</th><th>Type</th><th>Conv. Type</th><th style="cursor:pointer;" id="cust-tp-date-th" class="sort-asc">Date ↑</th><th>Fingerprint</th><th>Source</th><th>Campaign</th>
                         <th>Ad Group</th><th>Creative</th><th>Device</th><th>Browser</th><th>OS</th>
                         <th>Country</th><th>City</th><th>IP</th>
                         <th>Order</th><th>Customer</th><th>Payout</th><th>Value</th><th>Status</th>
                     </tr>
                 </thead>
                 <tbody>`;
-
-        let prevFp = null;
-        allTp.forEach((r, i) => {
-            if(prevFp !== null && r._fp !== prevFp) {
-                html += '<tr style="height:4px;background:var(--blue-light);"><td colspan="20"></td></tr>';
-            }
-            prevFp = r._fp;
-
-            const type = r.t === 'c' ? 'click' : r.t === 'v' ? 'conv' : 'order';
-            const typeBadge = r.t === 'c' ? '<span class="badge badge-blue">CLICK</span>'
-                : r.t === 'v' ? '<span class="badge badge-orange">CONV</span>'
-                : '<span class="badge badge-green">ORDER</span>';
-
-            const ip = r.click_ip || r.conversion_ip || r.order_ip || r.ip || '';
-            const payout = r.t === 'v' && r.pay != null && r.pay !== '' ? '$' + Number(r.pay).toFixed(2) : '';
-            const value = r.t === 'o' && r.pr != null && r.pr !== '' ? '$' + Number(r.pr).toFixed(2) : '';
-            const stBadge = r.t === 'o' ? (() => { const b = r.st === 'FULFILLED' ? 'badge-green' : r.st === 'PENDING' ? 'badge-orange' : 'badge-grey'; return '<span class="badge ' + b + '">' + (r.st || 'N/A') + '</span>'; })() : '';
-            const source = r.src || r.fsrc || '';
-            const campaign = r.t === 'o' ? (r.rcmp || r.cmp || '') : (r.cmp || '');
-            const adGroup = r.adg || r.s1 || '';
-            const oidLink = r.oid ? '<a class="xlink" onclick="D.navigateToOrder(\'' + r.oid + '\')">#' + r.oid + '</a>' : '';
-            const custLink = r.nm ? (r.cid ? '<a class="xlink" onclick="D.navigateToCustomer(\'' + r.cid + '\')">' + r.nm + '</a>' : r.nm) : '';
-            const fpShort = r._fp ? '<a class="xlink" onclick="D.showJourneyPathsTable(\'' + r._fp + '\')" style="font-size:11px;">' + r._fp.substring(0, 10) + '...</a>' : '';
-
-            html += '<tr class="' + type + '">' +
-                '<td>' + (i + 1) + '</td><td>' + typeBadge + '</td><td>' + (r.vt || '') + '</td><td style="white-space:nowrap;">' + this.fmtDate(r.dt) + '</td>' +
-                '<td>' + fpShort + '</td>' +
-                '<td>' + source + '</td><td>' + campaign + '</td><td>' + adGroup + '</td>' +
-                '<td>' + (r.s4 || '') + '</td>' +
-                '<td>' + (r.dev || '') + '</td><td>' + (r.br || '') + '</td><td>' + (r.os || '') + '</td>' +
-                '<td>' + (r.co || '') + '</td><td>' + (r.ci || '') + '</td><td>' + ip + '</td>' +
-                '<td>' + oidLink + '</td><td>' + custLink + '</td>' +
-                '<td>' + payout + '</td><td>' + value + '</td><td>' + stBadge + '</td>' +
-                '</tr>';
-        });
-
+        html += this._renderCustomerTouchpointsBody(allTp, 'asc');
         html += '</tbody></table></div>';
 
         document.getElementById('detail-content').innerHTML = html;
         makePanelResizable();
         document.getElementById('overlay').classList.add('open');
+
+        // Orders date sort toggle
+        const ordersDateTh = document.getElementById('cust-orders-date-th');
+        const ordersTbody = ordersDateTh ? ordersDateTh.closest('table').querySelector('tbody') : null;
+        let ordersSortDir = 'asc';
+        if (ordersDateTh && ordersTbody) {
+            ordersDateTh.addEventListener('click', () => {
+                ordersSortDir = ordersSortDir === 'asc' ? 'desc' : 'asc';
+                ordersDateTh.textContent = ordersSortDir === 'asc' ? 'Date ↑' : 'Date ↓';
+                ordersDateTh.className = ordersSortDir === 'asc' ? 'sort-asc' : 'sort-desc';
+                ordersTbody.innerHTML = this._renderCustomerOrdersBody(cust.orders, ordersSortDir);
+            });
+        }
+
+        // Touchpoints date sort toggle
+        const tpDateTh = document.getElementById('cust-tp-date-th');
+        const tpTbody = tpDateTh ? tpDateTh.closest('table').querySelector('tbody') : null;
+        let tpSortDir = 'asc';
+        if (tpDateTh && tpTbody) {
+            tpDateTh.addEventListener('click', () => {
+                tpSortDir = tpSortDir === 'asc' ? 'desc' : 'asc';
+                tpDateTh.textContent = tpSortDir === 'asc' ? 'Date ↑' : 'Date ↓';
+                tpDateTh.className = tpSortDir === 'asc' ? 'sort-asc' : 'sort-desc';
+                tpTbody.innerHTML = this._renderCustomerTouchpointsBody(allTp, tpSortDir);
+            });
+        }
     }
 
     // Renders a vertical timeline of touchpoint cards (used in order detail view)
@@ -1531,6 +1598,29 @@ function autoFitColumns(tableEl) {
     });
 }
 
+// Highlights all cells in a column when hovering its header
+function addColumnHighlight(tableEl) {
+    if (!tableEl || !tableEl.querySelector('thead')) return;
+    const ths = Array.from(tableEl.querySelectorAll('thead th'));
+
+    ths.forEach((th, colIndex) => {
+        th.addEventListener('mouseenter', () => {
+            const rows = tableEl.querySelectorAll('tbody tr');
+            rows.forEach(row => {
+                const td = row.children[colIndex];
+                if (td) td.classList.add('col-highlight');
+            });
+        });
+        th.addEventListener('mouseleave', () => {
+            const rows = tableEl.querySelectorAll('tbody tr');
+            rows.forEach(row => {
+                const td = row.children[colIndex];
+                if (td) td.classList.remove('col-highlight');
+            });
+        });
+    });
+}
+
 // Adds drag handles to table column headers for manual resize (+ double-click to auto-fit)
 function makeResizable(tableEl) {
     if(!tableEl) return;
@@ -1617,6 +1707,7 @@ function makeContainerResizable(containerId) {
             el.querySelectorAll('table.tbl').forEach(t => {
                 autoFitColumns(t);
                 makeResizable(t);
+                addColumnHighlight(t);
             });
         });
     });
@@ -1631,6 +1722,7 @@ function makePanelResizable() {
             el.querySelectorAll('table.tp-table, table.tbl').forEach(t => {
                 autoFitColumns(t);
                 makeResizable(t);
+                addColumnHighlight(t);
             });
         });
     });
@@ -1665,6 +1757,8 @@ window.D = {
     onMultiSelectChange: () => {},
     msSelectAll: () => {},
     msClearAll: () => {},
+    _renderCustomerOrdersBody: () => '',
+    _renderCustomerTouchpointsBody: () => '',
 };
 
 // Main init: tries to load CSV from ?csvUrl= param (or default file), falls back to file upload
