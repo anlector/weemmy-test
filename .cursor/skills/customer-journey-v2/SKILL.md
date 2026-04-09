@@ -196,7 +196,7 @@ When viewing a journey path, there should be a way to see if this fingerprint is
 
 | Layer | Tool |
 |-------|------|
-| Frontend / Dashboard | HTML + vanilla JS (single-file app, transitioning to multi-file) |
+| Frontend / Dashboard | HTML + vanilla JS (multi-file: `customer_journey_dashboard.html`, `app.js`, `styles.css`) |
 | API | GraphQL at `api-aggregator.weem.com/graphql` |
 | Previous frontend (legacy) | Bubble (no-code) — Andrii's primary background |
 | Database | PostgreSQL on DigitalOcean (3 separate DBs: Shopify in Sasha's DB, RedTrack in Slava's DB, Facebook separate) |
@@ -247,8 +247,11 @@ When viewing a journey path, there should be a way to see if this fingerprint is
 
 ## Current State (as of April 2026)
 
-### What exists — the HTML Dashboard (`customer_journey_dashboard.html`)
-A functional single-file HTML dashboard built with Claude, now hosted on GitHub Pages.
+### What exists — the Dashboard (3 files)
+A functional multi-file dashboard built with Claude, hosted on GitHub Pages:
+- **`customer_journey_dashboard.html`** — HTML markup only (~83 lines). Links to CDN scripts (Chart.js, PapaParse), `styles.css`, and `app.js` (loaded with `defer`).
+- **`app.js`** — all JavaScript (~1,730 lines): IndexedDB cache, CSV loader/normalizer, `Dashboard` class, column resize utilities, bootstrap IIFE. Every function has a one-line description comment.
+- **`styles.css`** — all CSS (~262 lines): custom properties, component styles, responsive rules.
 
 **Three tabs:**
 1. **Journey Paths** (default) — horizontal layout with touchpoint cards per fingerprint row. Left column shows row number, touchpoint count, date range, revenue, customer name/email. Main area shows type-coded cards (blue=click, orange=conversion, green=order) with creative names (s4/s5/s6).
@@ -275,22 +278,24 @@ A functional single-file HTML dashboard built with Claude, now hosted on GitHub 
 
 **Two-stage filter architecture (important):** Stage 1 filters individual records (date range + search only). Stage 2 filters journey paths after `buildJourneys()` (source, campaign, country). This separation is critical — filtering at Stage 1 would strip touchpoints from journey rows, breaking the visualization.
 
-**Data loading (current):** CSV via PapaParse with IndexedDB caching. CSV URL passed via query string parameter.
+**Data loading (current):** CSV via PapaParse with IndexedDB caching. CSV URL passed via `?csvUrl=` query string parameter, with a hardcoded fallback to `./all_data_by_columns%203%20to%20bubble.csv`. No embedded data — the old `const RAW = [...]` inline array (4.7MB) has been removed.
 
 **Key methods in Dashboard class:** `renderRoute()` (Journey Paths view), `renderOrders()`, `renderCustomers()`, `showJourneyPathsTable(fp)` (table in side panel), `showCustomer(cid)` (all-actions table), `showTouchpoint(fp, index)` (single touchpoint detail), `showOrder(oid)`, `navigateToFingerprint(fp)`, `navigateToOrder(oid)`, `navigateToCustomer(cid)`, `parseDate()`, `compareDates()`, `autoFitColumns()` (standalone function)
 
-**Built with:** vanilla JS (no framework), CSS custom properties. Single `Dashboard` class.
+**Built with:** vanilla JS (no framework), CSS custom properties. Single `Dashboard` class in `app.js`.
 
 **GitHub:** `anlector/weemmy-test` repo, deployed to GitHub Pages
 
-### Critical code pattern — `this.` vs `D.`
+### Critical code pattern — `this.` vs `D.` (in `app.js`)
 Inside Dashboard class methods, always use `this.methodName()`. Never use `D.methodName()` inside class methods because `window.D` is not assigned until after the constructor completes. `D.` is ONLY safe inside HTML onclick strings (e.g. `onclick="D.showJourney('${fp}')"`). This has caused multiple bugs and must be included as a warning in every Cursor prompt.
+
+### Load order (important for the multi-file split)
+`customer_journey_dashboard.html` loads CDN scripts (Chart.js, PapaParse) synchronously in `<head>`, then `app.js` with `defer`. The `defer` attribute ensures `app.js` runs after HTML parsing completes but before DOMContentLoaded. A `window.D` no-op stub near the end of `app.js` prevents errors from inline `onclick` handlers during the brief gap before the real Dashboard instance is created. PapaParse must load WITHOUT `defer` (or before `app.js` in source order) so it's available when `app.js` executes.
 
 ### Known issues
 - Filters only work for journeys, not cascaded to orders/customers
 - "Unattributed" traffic is common due to RedTrack fingerprint fragmentation
 - Currently CSV-based — needs migration to live GraphQL API
-- File is too large (4.6MB with data) for GitHub web viewer
 - Cross-source journeys are rare in the data (only 77 out of 10,082) because one RedTrack fingerprint = one click session = typically one source
 
 ### Weem Fingerprint status
@@ -341,6 +346,9 @@ Full API specification: `Customer_Journey_Dashboard_API_Requirements_v1.docx` �
 9. **Weem Fingerprint automation** (Slava's work, based on Airtable examples)
 
 ### Recently completed (April 2026 sprint)
+- **Split single-file HTML into 3 files** — `customer_journey_dashboard.html` (markup), `app.js` (logic), `styles.css` (styles). App.js loaded with `defer` in `<head>`.
+- **Removed embedded 4.7MB RAW data array** — dashboard now loads data exclusively from CSV via URL parameter
+- **Added function descriptions** — every function/method in app.js has a one-line comment
 - Date parsing fix — handles Unix timestamps, ISO, DD/MM/YYYY formats
 - Creative names (s4/s5/s6) added to touchpoint cards and tables
 - First Source / Subsequent Source multi-select filters with two-stage filtering
