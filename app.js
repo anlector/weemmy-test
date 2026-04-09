@@ -1060,7 +1060,7 @@ class Dashboard {
             });
 
             if(more > 0) {
-                html += `<div class="route-cell route-cell-more">+${more} more</div>`;
+                html += `<div class="route-cell route-cell-more" onclick="event.stopPropagation();D.expandRouteRow('${j.fp}')">+${more} more</div>`;
             }
 
             html += `</div></div>`;
@@ -1069,6 +1069,90 @@ class Dashboard {
         if(!page.length) html = '<div style="padding:16px 20px; color:var(--text-dim);">No journeys match current filters.</div>';
         document.getElementById('route-table').innerHTML = html;
         this.renderPager('route', data.length);
+    }
+
+    // Expands all hidden touchpoints for a journey row when "+N more" is clicked
+    expandRouteRow(fp) {
+        const journey = this.journeys.find(j => j.fp === fp);
+        if (!journey) return;
+
+        const touchpoints = [...journey.rows].sort((a, b) => this.compareDates(a.dt, b.dt));
+        const hidden = touchpoints.slice(20);
+        if (!hidden.length) return;
+
+        // Locate the "+N more" element inside the correct row
+        let targetCells = null;
+        let moreEl = null;
+        const rows = document.querySelectorAll('.route-row');
+        for (const row of rows) {
+            const fpEl = row.querySelector('.route-fp');
+            if (fpEl && fpEl.getAttribute('onclick') && fpEl.getAttribute('onclick').includes(fp)) {
+                targetCells = row.querySelector('.route-cells');
+                moreEl = targetCells ? targetCells.querySelector('.route-cell-more') : null;
+                break;
+            }
+        }
+        if (!targetCells || !moreEl) return;
+
+        const tr = (s, n) => { if (!s) return ''; return s.length > n ? s.substring(0, n) + '…' : s; };
+        const kv = (label, val) => val ? `<div class="route-cell-kv"><span class="kv-label">${label}</span> ${val}</div>` : '';
+
+        let newHtml = '';
+        hidden.forEach((r, i) => {
+            const tpIndex = 20 + i;
+            const type = r.t === 'c' ? 'click' : r.t === 'v' ? 'conv' : 'order';
+            const typeLabel = r.t === 'c' ? 'CLICK' : r.t === 'v' ? 'CONVERSION' : 'ORDER';
+
+            let cardBody = '';
+            if (r.t === 'c') {
+                cardBody += kv('Source', r.src);
+                cardBody += kv('Campaign', tr(r.cmp, 28));
+                cardBody += kv('Ad Group', tr(r.adg || r.s1, 24));
+                cardBody += kv('Placement', tr(r.plc || r.s2, 24));
+                cardBody += kv('Creative', tr(r.s4, 24));
+            } else if (r.t === 'v') {
+                cardBody += kv('Type', r.vt);
+                cardBody += kv('Source', r.src);
+                cardBody += kv('Campaign', tr(r.cmp, 28));
+                const payout = (r.pay != null && r.pay !== '') ? `$${Number(r.pay).toFixed(2)}` : '';
+                cardBody += kv('Payout', payout);
+                cardBody += kv('Creative', tr(r.s4, 24));
+            } else {
+                const stBadge = r.st === 'FULFILLED' ? 'badge-green' : r.st === 'PENDING' ? 'badge-orange' : 'badge-grey';
+                const value = (r.pr != null && r.pr !== '') ? `$${Number(r.pr).toFixed(2)}` : '';
+                const oidLink = r.oid ? `<a class="xlink" onclick="event.stopPropagation();D.navigateToOrder('${r.oid}')">#${r.oid}</a>` : '';
+                cardBody += `<div class="route-cell-kv">${oidLink}</div>`;
+                cardBody += kv('Value', value);
+                cardBody += `<div class="route-cell-kv"><span class="badge ${stBadge}">${r.st || 'N/A'}</span></div>`;
+                cardBody += kv('Campaign', tr(r.rcmp || r.cmp, 28));
+                if (r.nm) {
+                    const custClick = r.cid ? `event.stopPropagation();D.navigateToCustomer('${r.cid}')` : '';
+                    cardBody += `<div class="route-cell-kv"><span class="kv-label">Customer</span><a class="xlink" onclick="${custClick}">${tr(r.nm, 20)}</a></div>`;
+                }
+            }
+
+            const devParts = [r.dev, r.os].filter(Boolean);
+            const locParts = [r.ci, r.co].filter(Boolean);
+            let contextChips = '';
+            if (devParts.length || locParts.length || r.br) {
+                contextChips = '<div class="route-cell-context">';
+                if (devParts.length) contextChips += `<span>${devParts.join(' · ')}</span>`;
+                if (r.br) contextChips += `<span>${r.br}</span>`;
+                if (locParts.length) contextChips += `<span>${locParts.join(', ')}</span>`;
+                contextChips += '</div>';
+            }
+
+            const onclick = `event.stopPropagation();D.showTouchpoint('${fp}',${tpIndex})`;
+            newHtml += `<div class="route-cell ${type}" onclick="${onclick}">
+                <div class="route-cell-type ${type}">${typeLabel}</div>
+                ${cardBody}
+                ${contextChips}
+                <div class="route-cell-date">${this.fmtDate(r.dt)}</div>
+            </div>`;
+        });
+
+        moreEl.insertAdjacentHTML('beforebegin', newHtml);
+        moreEl.remove();
     }
 
     // Changes the sort field for Journey Paths (lastDate, count, revenue, etc.)
@@ -1982,6 +2066,7 @@ window.D = {
     setRouteSort: () => {},
     toggleRouteSortDir: () => {},
     navigateToFingerprint: () => {},
+    expandRouteRow: () => {},
     navigateToOrder: () => {},
     navigateToCustomer: () => {},
     toggleMultiSelect: () => {},
