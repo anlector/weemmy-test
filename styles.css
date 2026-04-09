@@ -264,3 +264,49 @@ body.col-resizing, body.col-resizing * { cursor:col-resize !important; user-sele
     .filters{flex-direction:column;}
     .tabs{flex-direction:column;}
 }
+
+/* Attribution tab */
+.attr-view-toggle { display:flex; gap:4px; background:rgba(0,0,0,0.05); border-radius:8px; padding:3px; }
+.btn-attr { padding:6px 14px; border:none; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; background:transparent; color:var(--text-dim); transition:all 0.2s; }
+.btn-attr.active { background:var(--bg-card); color:var(--blue); box-shadow:0 1px 3px rgba(0,0,0,0.1); }
+.btn-attr:hover:not(.active) { color:var(--text); }
+.attr-bar { display:inline-block; height:18px; border-radius:4px; opacity:0.7; vertical-align:middle; min-width:2px; max-width:80px; transition:width 0.3s; }
+.attr-bar-ft { background:#6366f1; }
+.attr-bar-lt { background:#f59e0b; }
+.attr-bar-ln { background:#10b981; }
+#attr-table th { cursor:pointer; user-select:none; white-space:nowrap; }
+#attr-table th:hover { background:rgba(0,0,0,0.03); }
+#attr-table td.attr-name-cell { max-width:250px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* Funnel toggle button in filter bar */
+.btn-funnel-toggle { font-size:13px; color:#6366f1; cursor:pointer; user-select:none; font-weight:500; padding:7px 16px; border:1px solid rgba(99,102,241,0.3); border-radius:6px; background:rgba(99,102,241,0.05); transition:all 0.2s; white-space:nowrap; align-self:flex-end; }
+.btn-funnel-toggle:hover { background:rgba(99,102,241,0.12); }
+
+/* Conversion Funnel */
+.funnel-panel { background:var(--bg-card); border-radius:var(--radius); box-shadow:0 1px 3px rgba(0,0,0,0.06); margin-bottom:var(--gap); overflow:hidden; }
+.funnel-header { display:flex; align-items:center; padding:12px 20px; cursor:pointer; gap:12px; user-select:none; }
+.funnel-header:hover { background:rgba(0,0,0,0.02); }
+.funnel-title { font-weight:700; font-size:14px; color:var(--text); }
+.funnel-summary { font-size:12px; color:var(--text-dim); flex:1; }
+.funnel-toggle { font-size:12px; color:var(--text-dim); transition:transform 0.2s; }
+.funnel-toggle.collapsed { transform:rotate(-90deg); }
+.funnel-body { padding:0 20px 16px; }
+.funnel-body.collapsed { display:none; }
+
+.funnel-bar { display:flex; align-items:center; gap:0; min-height:48px; }
+.funnel-stage { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:8px 12px; color:#fff; font-size:12px; font-weight:600; min-width:80px; position:relative; text-align:center; transition:opacity 0.15s; }
+.funnel-stage:hover { opacity:0.85; }
+.funnel-stage-label { font-size:10px; font-weight:400; opacity:0.9; white-space:nowrap; }
+.funnel-stage-count { font-size:16px; font-weight:800; }
+.funnel-stage-pct { font-size:10px; font-weight:400; opacity:0.8; }
+.funnel-arrow { display:flex; flex-direction:column; align-items:center; padding:0 6px; color:var(--text-dim); font-size:10px; line-height:1.2; }
+.funnel-arrow-rate { font-weight:700; font-size:11px; color:var(--text); }
+
+.funnel-stage.s-click { background:var(--blue); }
+.funnel-stage.s-viewcontent { background:#8b5cf6; }
+.funnel-stage.s-addtocart { background:#f59e0b; }
+.funnel-stage.s-initiatecheckout { background:var(--orange); }
+.funnel-stage.s-purchase { background:var(--green); }
+.funnel-stage.s-subscription { background:#10b981; }
+.funnel-stage.s-recurring { background:#06b6d4; }
+.funnel-stage.s-other { background:#6b7280; }

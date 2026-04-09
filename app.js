@@ -1,3 +1,14 @@
+// Conversion funnel stage configuration (order matters)
+const FUNNEL_STAGES = [
+    { key: 'click', label: 'Clicks', cssClass: 's-click', matchType: 'click' },
+    { key: 'ViewContent', label: 'View Content', cssClass: 's-viewcontent', matchType: 'vt' },
+    { key: 'AddtoCart', label: 'Add to Cart', cssClass: 's-addtocart', matchType: 'vt' },
+    { key: 'InitiateCheckout', label: 'Initiate Checkout', cssClass: 's-initiatecheckout', matchType: 'vt' },
+    { key: 'Purchase', label: 'Purchase', cssClass: 's-purchase', matchType: 'vt' },
+    { key: 'Subscription', label: 'Subscription', cssClass: 's-subscription', matchType: 'vt' },
+    { key: 'Recurring', label: 'Recurring', cssClass: 's-recurring', matchType: 'vt' },
+];
+
 // ═══════════════════════════════════════════
 // IndexedDB key-value cache for parsed CSV data
 // Avoids re-parsing large CSVs on every page load
@@ -424,6 +435,9 @@ class Dashboard {
         this.pages = {orders:0, customers:0, route:0};
         this.pageSize = 20;
         this.sortState = {};
+        this._attrView = 'source';
+        this._attrSortCol = 'ft';
+        this._attrSortAsc = false;
         // Load saved field visibility config from localStorage
         // tpHiddenFields: Set of field keys the user has chosen to hide
         try {
@@ -620,6 +634,7 @@ class Dashboard {
 
         this.buildCustomers();
         this.renderKPIs();
+        this.renderFunnel();
         this.renderTab();
     }
 
@@ -693,7 +708,90 @@ class Dashboard {
         this.customers.sort((a,b) => b.revenue - a.revenue);
     }
 
-    // --- KPIs ---
+    // Renders the conversion funnel bar from filtered data
+    renderFunnel() {
+        const panel = document.getElementById('funnel-panel');
+        if (panel && panel.style.display === 'none') return;
+        const bar = document.getElementById('funnel-bar');
+        const summary = document.getElementById('funnel-summary');
+        if (!bar || !summary) return;
+
+        const counts = {};
+        counts['click'] = this.filtered.filter(r => r.t === 'c').length;
+        this.filtered.forEach(r => {
+            if (r.t === 'v' && r.vt) {
+                counts[r.vt] = (counts[r.vt] || 0) + 1;
+            }
+        });
+        if (!counts['Purchase']) {
+            counts['Purchase'] = this.filtered.filter(r => r.t === 'o').length;
+        }
+
+        const activeStages = FUNNEL_STAGES.filter(s => (counts[s.key] || 0) > 0);
+        if (activeStages.length === 0) {
+            bar.innerHTML = '<div style="color:var(--text-dim);font-size:12px;padding:8px;">No funnel data for current filters</div>';
+            summary.textContent = '';
+            return;
+        }
+
+        const maxCount = Math.max(...activeStages.map(s => counts[s.key] || 0));
+        const firstCount = counts[activeStages[0].key] || 0;
+        const lastCount = counts[activeStages[activeStages.length - 1].key] || 0;
+        const overallRate = firstCount > 0 ? ((lastCount / firstCount) * 100).toFixed(1) : 0;
+
+        summary.textContent = `${activeStages[0].label} → ${activeStages[activeStages.length - 1].label}: ${overallRate}% overall conversion`;
+
+        let html = '';
+        activeStages.forEach((stage, i) => {
+            const count = counts[stage.key] || 0;
+
+            html += `<div class="funnel-stage ${stage.cssClass}" style="flex:1 1 0;min-width:0;border-radius:${i === 0 ? '8px 0 0 8px' : i === activeStages.length - 1 ? '0 8px 8px 0' : '0'};">
+                <div class="funnel-stage-label">${stage.label}</div>
+                <div class="funnel-stage-count">${count.toLocaleString()}</div>
+            </div>`;
+
+            if (i < activeStages.length - 1) {
+                const nextCount = counts[activeStages[i + 1].key] || 0;
+                const rate = count > 0 ? ((nextCount / count) * 100).toFixed(0) : 0;
+                html += `<div class="funnel-arrow">
+                    <div>→</div>
+                    <div class="funnel-arrow-rate">${rate}%</div>
+                </div>`;
+            }
+        });
+
+        bar.innerHTML = html;
+
+        requestAnimationFrame(() => {
+            const barEl = document.getElementById('funnel-bar');
+            if (!barEl) return;
+            const stageEls = barEl.querySelectorAll('.funnel-stage');
+            const arrowEls = barEl.querySelectorAll('.funnel-arrow');
+            if (!stageEls.length) return;
+            const barWidth = barEl.getBoundingClientRect().width;
+            let totalArrowWidth = 0;
+            arrowEls.forEach(a => totalArrowWidth += a.getBoundingClientRect().width);
+            const available = barWidth - totalArrowWidth - 2;
+            const stageWidth = Math.floor(available / stageEls.length);
+            stageEls.forEach(s => {
+                s.style.flex = 'none';
+                s.style.width = stageWidth + 'px';
+            });
+        });
+    }
+
+    // Shows/hides the funnel panel via the filter bar button
+    toggleFunnelPanel() {
+        const panel = document.getElementById('funnel-panel');
+        const btn = document.getElementById('funnel-toggle-btn');
+        if (!panel || !btn) return;
+        const isHidden = panel.style.display === 'none';
+        panel.style.display = isHidden ? '' : 'none';
+        btn.textContent = isHidden ? 'Hide Conversion Funnel' : 'Show Conversion Funnel';
+        if (isHidden) this.renderFunnel();
+    }
+
+    // Updates the 5 KPI cards and tab counts
     renderKPIs() {
         const fps = new Set();
         this.filtered.forEach(r => { if(r.fp) fps.add(r.fp); });
@@ -707,6 +805,10 @@ class Dashboard {
         document.getElementById('tc-orders').textContent = '('+this.fOrders.length+')';
         document.getElementById('tc-customers').textContent = '('+this.customers.length+')';
         document.getElementById('tc-route').textContent = '('+this.journeys.length+')';
+        const attrSrcs = new Set();
+        this.filtered.forEach(r => { if(r.t==='c' && r.src) attrSrcs.add(r.src); });
+        const tcAttr = document.getElementById('tc-attribution');
+        if(tcAttr) tcAttr.textContent = '('+attrSrcs.size+')';
     }
 
     // --- TABS ---
@@ -716,7 +818,7 @@ class Dashboard {
         document.querySelectorAll('.tab-body').forEach(t=>t.classList.remove('active'));
         document.querySelector(`.tab-body#tab-${tab}`).classList.add('active');
         const tabs = document.querySelectorAll('.tab');
-        const idx = {route:0,orders:1,customers:2}[tab];
+        const idx = {route:0,orders:1,customers:2,attribution:3}[tab];
         tabs[idx].classList.add('active');
         this.renderTab();
     }
@@ -724,6 +826,7 @@ class Dashboard {
     renderTab() {
         if(this.activeTab==='orders') this.renderOrders();
         else if(this.activeTab==='route') this.renderRoute();
+        else if(this.activeTab==='attribution') this.renderAttribution();
         else this.renderCustomers();
     }
 
@@ -1383,6 +1486,135 @@ class Dashboard {
         }
     }
 
+    // Switches attribution view between source and campaign
+    setAttrView(view) {
+        this._attrView = view;
+        document.getElementById('btn-attr-source').classList.toggle('active', view === 'source');
+        document.getElementById('btn-attr-campaign').classList.toggle('active', view === 'campaign');
+        this.renderAttribution();
+    }
+
+    // Sorts the attribution table by the given column
+    sortAttrTable(col) {
+        this._attrSortAsc = this._attrSortCol === col ? !this._attrSortAsc : false;
+        this._attrSortCol = col;
+        this.renderAttribution();
+    }
+
+    // First-touch / last-touch / linear attribution analysis table
+    renderAttribution() {
+        const thead = document.getElementById('attr-thead');
+        const tbody = document.getElementById('attr-tbody');
+        const summary = document.getElementById('attr-summary');
+        if (!thead || !tbody) return;
+
+        const field = this._attrView === 'source' ? 'src' : 'cmp';
+        const label = this._attrView === 'source' ? 'Source' : 'Campaign';
+
+        const fpMap = {};
+        this.filtered.forEach(r => {
+            if (!r.fp) return;
+            if (!fpMap[r.fp]) fpMap[r.fp] = [];
+            fpMap[r.fp].push(r);
+        });
+
+        const attrData = {};
+        let totalConverting = 0;
+
+        Object.values(fpMap).forEach(records => {
+            const orders = records.filter(r => r.t === 'o');
+            if (!orders.length) return;
+            const clicks = records.filter(r => r.t === 'c').sort((a, b) => new Date(a.dt) - new Date(b.dt));
+            if (!clicks.length) return;
+            totalConverting++;
+
+            const totalRev = orders.reduce((s, o) => s + (parseFloat(o.pr) || 0), 0);
+            const firstKey = clicks[0][field] || 'Unknown';
+            const lastKey = clicks[clicks.length - 1][field] || 'Unknown';
+
+            const uniqueKeys = [...new Set(clicks.map(c => c[field] || 'Unknown'))];
+            const linearShare = 1 / uniqueKeys.length;
+            const linearRevShare = totalRev / uniqueKeys.length;
+
+            [firstKey, lastKey, ...uniqueKeys].forEach(k => {
+                if (!attrData[k]) attrData[k] = { ft: 0, lt: 0, linear: 0, revFt: 0, revLt: 0, revLn: 0 };
+            });
+
+            attrData[firstKey].ft += 1;
+            attrData[firstKey].revFt += totalRev;
+            attrData[lastKey].lt += 1;
+            attrData[lastKey].revLt += totalRev;
+            uniqueKeys.forEach(k => {
+                attrData[k].linear += linearShare;
+                attrData[k].revLn += linearRevShare;
+            });
+        });
+
+        const sortCol = this._attrSortCol || 'ft';
+        const sortAsc = this._attrSortAsc || false;
+        const sorted = Object.entries(attrData).sort((a, b) => {
+            let va, vb;
+            if (sortCol === 'name') { va = a[0].toLowerCase(); vb = b[0].toLowerCase(); return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va); }
+            va = a[1][sortCol] || 0; vb = b[1][sortCol] || 0;
+            return sortAsc ? va - vb : vb - va;
+        });
+        const maxFt = sorted.length ? Math.max(...sorted.map(([, v]) => v.ft)) : 1;
+        const maxLt = sorted.length ? Math.max(...sorted.map(([, v]) => v.lt)) : 1;
+        const maxLn = sorted.length ? Math.max(...sorted.map(([, v]) => v.linear)) : 1;
+
+        const arrow = col => {
+            if (sortCol !== col) return '';
+            return sortAsc ? ' ↑' : ' ↓';
+        };
+        thead.innerHTML = '<tr>' +
+            '<th onclick="D.sortAttrTable(\'name\')">' + label + arrow('name') + '</th>' +
+            '<th onclick="D.sortAttrTable(\'ft\')">First Touch' + arrow('ft') + '</th>' +
+            '<th onclick="D.sortAttrTable(\'lt\')">Last Touch' + arrow('lt') + '</th>' +
+            '<th onclick="D.sortAttrTable(\'linear\')">Linear' + arrow('linear') + '</th>' +
+            '<th onclick="D.sortAttrTable(\'revFt\')">Rev (FT)' + arrow('revFt') + '</th>' +
+            '<th onclick="D.sortAttrTable(\'revLt\')">Rev (LT)' + arrow('revLt') + '</th>' +
+            '<th onclick="D.sortAttrTable(\'revLn\')">Rev (Linear)' + arrow('revLn') + '</th>' +
+            '</tr>';
+
+        const fmt = n => n >= 1000 ? (n / 1000).toFixed(1) + 'k' : n.toFixed(0);
+        const fmtRev = n => '$' + (n >= 1000 ? (n / 1000).toFixed(1) + 'k' : n.toFixed(0));
+        const barHtml = (val, max, cls) => {
+            const pxWidth = max > 0 ? Math.round((val / max) * 80) : 0;
+            return '<div class="attr-bar ' + cls + '" style="width:' + Math.max(pxWidth, 2) + 'px"></div>';
+        };
+
+        let html = '';
+        sorted.forEach(([name, d]) => {
+            html += '<tr>' +
+                '<td class="attr-name-cell" title="' + name + '">' + name + '</td>' +
+                '<td>' + barHtml(d.ft, maxFt, 'attr-bar-ft') + ' ' + fmt(d.ft) + '</td>' +
+                '<td>' + barHtml(d.lt, maxLt, 'attr-bar-lt') + ' ' + fmt(d.lt) + '</td>' +
+                '<td>' + barHtml(d.linear, maxLn, 'attr-bar-ln') + ' ' + d.linear.toFixed(1) + '</td>' +
+                '<td>' + fmtRev(d.revFt) + '</td>' +
+                '<td>' + fmtRev(d.revLt) + '</td>' +
+                '<td>' + fmtRev(d.revLn) + '</td>' +
+                '</tr>';
+        });
+        tbody.innerHTML = html;
+
+        const tcEl = document.getElementById('tc-attribution');
+        if (tcEl) tcEl.textContent = ' (' + sorted.length + ')';
+        if (summary) {
+            summary.textContent = totalConverting + ' converting journeys analyzed across ' + sorted.length + ' ' + label.toLowerCase() + 's';
+        }
+
+        const table = document.getElementById('attr-table');
+        if (table) {
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    autoFitColumns(table);
+                    makeResizable(table);
+                    addColumnHighlight(table);
+                });
+            });
+        }
+    }
+
     // Renders a vertical timeline of touchpoint cards (used in order detail view)
     renderTimeline(touchpoints) {
         let html = '<div class="timeline">';
@@ -1759,6 +1991,11 @@ window.D = {
     msClearAll: () => {},
     _renderCustomerOrdersBody: () => '',
     _renderCustomerTouchpointsBody: () => '',
+    toggleFunnelPanel: () => {},
+    renderFunnel: () => {},
+    setAttrView: () => {},
+    renderAttribution: () => {},
+    sortAttrTable: () => {},
 };
 
 // Main init: tries to load CSV from ?csvUrl= param (or default file), falls back to file upload
