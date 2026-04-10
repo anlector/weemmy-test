@@ -213,7 +213,8 @@ const FILTER_OPERATORS = {
   function normalizeFromJsonEvent(j) {
     if (!j) return null;
     const fp = j.fp ?? j.fingerprint ?? j.rt_fingerprint ?? j.click_fingerprint;
-    const dt = j.dt ?? j.track_time ?? j.created_at ?? j.createdAt ?? j.conv_time ?? j.click_date ?? j.date;
+    let dt = j.dt ?? j.track_time ?? j.created_at ?? j.createdAt ?? j.conv_time ?? j.click_date ?? j.date;
+    if (dt && String(dt).startsWith('0001-')) dt = j.track_time ?? j.click_track_time ?? null;
     if (!fp || !dt) return null;
     const type = j.t ?? j.type ?? j.event_type ?? j.event ?? '';
     const t = (typeof type === 'string' && normalizeType(type)) || normalizeType(String(type));
@@ -320,7 +321,8 @@ const FILTER_OPERATORS = {
       }
 
       const clickFp = getFirst(row, ['click_fingerprint','click_fingerprint_hash']);
-      const clickDt = getFirst(row, ['click_created_at','click_date','click_track_time']);
+      let clickDt = getFirst(row, ['click_track_time','click_created_at','click_date']);
+      if (clickDt && String(clickDt).startsWith('0001-')) clickDt = null;
       if (clickFp && clickDt) {
         const clickRec = {
           t:'c', fp:String(clickFp), dt:String(clickDt),
@@ -425,7 +427,7 @@ const FILTER_OPERATORS = {
     if (!csvUrl) throw new Error('Missing csvUrl');
     if (!window.Papa) throw new Error('PapaParse is not loaded');
     if (!window.idbCache) throw new Error('idbCache is not loaded');
-    const CACHE_VERSION = 3; // bump to invalidate stale cached records
+    const CACHE_VERSION = 4; // bump to invalidate stale cached records
     const cacheKey = `csv:v${CACHE_VERSION}:${csvUrl}`;
     const cached = await window.idbCache.get(cacheKey);
     if (cached && Array.isArray(cached) && cached.length) return cached;
