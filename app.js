@@ -9,6 +9,59 @@ const FUNNEL_STAGES = [
     { key: 'Recurring', label: 'Recurring', cssClass: 's-recurring', matchType: 'vt' },
 ];
 
+// Per-tab filter field definitions (key matches record/journey property)
+const TAB_FILTER_FIELDS = {
+    route: [
+        { key: 'src', label: 'Source', type: 'select', level: 'journey' },
+        { key: 'firstSource', label: 'First Source', type: 'select', level: 'journey' },
+        { key: 'subsequentSource', label: 'Subsequent Source', type: 'select', level: 'journey' },
+        { key: 'cmp', label: 'Campaign', type: 'select', level: 'journey' },
+        { key: 'co', label: 'Country', type: 'select', level: 'record' },
+        { key: 'hasOrder', label: 'Has Orders', type: 'bool', level: 'journey' },
+        { key: 'hasConv', label: 'Has Conversions', type: 'bool', level: 'journey' },
+        { key: 'custName', label: 'Customer Name', type: 'text', level: 'journey' },
+        { key: 'custEmail', label: 'Customer Email', type: 'text', level: 'journey' },
+    ],
+    orders: [
+        { key: 'st', label: 'Status', type: 'select', level: 'record' },
+        { key: 'app', label: 'App', type: 'select', level: 'record' },
+        { key: 'rcmp', label: 'Campaign', type: 'select', level: 'record' },
+        { key: 'nm', label: 'Customer Name', type: 'text', level: 'record' },
+        { key: 'em', label: 'Customer Email', type: 'text', level: 'record' },
+        { key: 'pr', label: 'Order Value', type: 'number', level: 'record' },
+    ],
+    customers: [
+        { key: 'nm', label: 'Name', type: 'text', level: 'record' },
+        { key: 'em', label: 'Email', type: 'text', level: 'record' },
+        { key: 'orderCount', label: 'Order Count', type: 'number', level: 'record' },
+        { key: 'revenue', label: 'Revenue', type: 'number', level: 'record' },
+    ],
+    attribution: [],
+};
+
+// Operators available for each field type
+const FILTER_OPERATORS = {
+    select: [
+        { key: 'eq', label: 'is' },
+        { key: 'neq', label: 'is not' },
+    ],
+    text: [
+        { key: 'contains', label: 'contains' },
+        { key: 'eq', label: 'equals' },
+        { key: 'neq', label: 'does not equal' },
+        { key: 'starts', label: 'starts with' },
+    ],
+    bool: [
+        { key: 'eq', label: 'is' },
+    ],
+    number: [
+        { key: 'gt', label: 'greater than' },
+        { key: 'lt', label: 'less than' },
+        { key: 'between', label: 'between' },
+        { key: 'eq', label: 'equals' },
+    ],
+};
+
 // ═══════════════════════════════════════════
 // IndexedDB key-value cache for parsed CSV data
 // Avoids re-parsing large CSVs on every page load
@@ -438,6 +491,11 @@ class Dashboard {
         this._attrView = 'source';
         this._attrSortCol = 'ft';
         this._attrSortAsc = false;
+        this._tabFilters = {};
+        this._currentTab = 'route';
+        this.filteredJourneys = null;
+        this.filteredOrders = null;
+        this.filteredCustomers = null;
         // Load saved field visibility config from localStorage
         // tpHiddenFields: Set of field keys the user has chosen to hide
         try {
@@ -468,125 +526,39 @@ class Dashboard {
     }
 
     init() {
-        this.populateFilters();
-        this.filter();
+        this.renderTabFilters();
+        this.applyFilters();
     }
 
-    // --- FILTERS ---
-    populateFilters() {
-        const srcs = new Map(), cmps = new Set(), cos = new Set();
-        this.raw.forEach(r => {
-            if(r.src) {
-                const key = r.src.toLowerCase();
-                if(!srcs.has(key)) srcs.set(key, r.src);
-            }
-            if(r.cmp) cmps.add(r.cmp);
-            if(r.rcmp) cmps.add(r.rcmp);
-            if(r.co) cos.add(r.co);
-        });
-        const srcList = [...srcs.values()].sort((a,b) => a.toLowerCase().localeCompare(b.toLowerCase()));
-        this.populateMultiSelect('ms-first-source', srcList);
-        this.populateMultiSelect('ms-subsequent-source', srcList);
-        this.fillSelect('f-campaign', [...cmps].sort());
-        this.fillSelect('f-country', [...cos].sort());
-    }
-
-    // Appends <option> elements to a <select> dropdown
-    fillSelect(id, vals) {
-        const s = document.getElementById(id);
-        vals.forEach(v => { const o = document.createElement('option'); o.value=v; o.textContent=v; s.appendChild(o); });
-    }
-
-    // Resets all filter inputs to default and re-renders
+    // Resets all filter inputs (global + per-tab) to default and auto-applies
     clearFilters() {
         document.getElementById('f-from').value='';
         document.getElementById('f-to').value='';
         document.getElementById('f-search').value='';
-        document.getElementById('f-campaign').value='';
-        document.getElementById('f-country').value='';
-        ['ms-first-source','ms-subsequent-source'].forEach(id => {
-            const container = document.getElementById(id);
-            if(!container) return;
-            container.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = false);
-            const trigger = container.querySelector('.ms-trigger');
-            if(trigger) trigger.textContent = 'All Sources ▾';
-        });
-        this.filter();
+        Object.keys(this._tabFilters).forEach(tab => { this._tabFilters[tab] = []; });
+        this.renderTabFilters();
+        this.applyFilters();
     }
 
-    // Opens/closes a multi-select filter dropdown
-    toggleMultiSelect(id) {
-        const container = document.getElementById(id);
-        if(!container) return;
-        const dd = container.querySelector('.ms-dropdown');
-        if(!dd) return;
-        const isOpen = dd.style.display !== 'none';
-        document.querySelectorAll('.ms-dropdown').forEach(d => d.style.display = 'none');
-        dd.style.display = isOpen ? 'none' : 'block';
+
+    // Highlights the Apply button to indicate staged changes waiting
+    markFiltersPending() {
+        const btn = document.getElementById('btn-apply-filters');
+        if (btn) btn.classList.add('is-pending');
     }
 
-    // Returns Set of checked values in a multi-select dropdown
-    getSelectedSources(id) {
-        const container = document.getElementById(id);
-        if(!container) return new Set();
-        const checked = container.querySelectorAll('.ms-dropdown input[type=checkbox]:checked');
-        const vals = new Set();
-        checked.forEach(cb => { if(cb.dataset.value) vals.add(cb.dataset.value); });
-        return vals;
+    // Single entry point: runs global filter + per-tab filters + render
+    applyFilters() {
+        this.filter(true);
+        this.applyTabFilters();
+        this.renderTab();
+        const btn = document.getElementById('btn-apply-filters');
+        if (btn) btn.classList.remove('is-pending');
     }
 
-    // Builds the checkbox list inside a multi-select dropdown
-    populateMultiSelect(id, values) {
-        const container = document.getElementById(id);
-        if(!container) return;
-        const dd = container.querySelector('.ms-dropdown');
-        if(!dd) return;
-        let html = '<div class="ms-actions"><button onclick="D.msSelectAll(\'' + id + '\')">All</button><button onclick="D.msClearAll(\'' + id + '\')">None</button></div>';
-        values.forEach(v => {
-            html += '<label><input type="checkbox" data-value="' + v + '" onchange="D.onMultiSelectChange(\'' + id + '\')">' + v + '</label>';
-        });
-        dd.innerHTML = html;
-    }
-
-    // Checks all boxes in a multi-select and re-filters
-    msSelectAll(id) {
-        const container = document.getElementById(id);
-        if(!container) return;
-        container.querySelectorAll('.ms-dropdown input[type=checkbox]').forEach(cb => cb.checked = true);
-        this.onMultiSelectChange(id);
-    }
-
-    // Unchecks all boxes in a multi-select and re-filters
-    msClearAll(id) {
-        const container = document.getElementById(id);
-        if(!container) return;
-        container.querySelectorAll('.ms-dropdown input[type=checkbox]').forEach(cb => cb.checked = false);
-        this.onMultiSelectChange(id);
-    }
-
-    // Updates multi-select trigger label ("All Sources", "2 selected", etc.) and re-filters
-    onMultiSelectChange(id) {
-        const container = document.getElementById(id);
-        if(!container) return;
-        const selected = this.getSelectedSources(id);
-        const trigger = container.querySelector('.ms-trigger');
-        if(trigger) {
-            const total = container.querySelectorAll('.ms-dropdown input[type=checkbox]').length;
-            if(selected.size === 0 || selected.size === total) {
-                trigger.textContent = 'All Sources ▾';
-            } else if(selected.size <= 2) {
-                trigger.textContent = [...selected].join(', ') + ' ▾';
-            } else {
-                trigger.textContent = selected.size + ' selected ▾';
-            }
-        }
-        this.filter();
-    }
-
-    // Two-stage filter: Stage 1 filters individual records (date, search text).
-    // Stage 2 filters journey paths by source, campaign, country — preserving
-    // complete touchpoint data within each row.
-    filter() {
+    // Global filter: filters individual records by date range and search text,
+    // then rebuilds journeys and customers. skipRender=true when called from applyFilters().
+    filter(skipRender) {
         const from = document.getElementById('f-from').value;
         const to = document.getElementById('f-to').value;
         const search = document.getElementById('f-search').value.toLowerCase();
@@ -607,35 +579,15 @@ class Dashboard {
         this.pages = {orders:0, customers:0, route:0};
 
         this.buildJourneys();
-
-        const firstSourcesRaw = this.getSelectedSources('ms-first-source');
-        const firstSources = new Set([...firstSourcesRaw].map(s => s.toLowerCase()));
-        const subsequentSourcesRaw = this.getSelectedSources('ms-subsequent-source');
-        const subsequentSources = new Set([...subsequentSourcesRaw].map(s => s.toLowerCase()));
-        const campaign = document.getElementById('f-campaign').value;
-        const country = document.getElementById('f-country').value;
-
-        if(firstSources.size > 0 || subsequentSources.size > 0 || campaign || country) {
-            this.journeys = this.journeys.filter(j => {
-                const sorted = [...j.rows].sort((a,b) => this.compareDates(a.dt, b.dt));
-                if(firstSources.size > 0) {
-                    const firstSrc = ((sorted[0] || {}).src || '').toLowerCase();
-                    if(!firstSources.has(firstSrc)) return false;
-                }
-                if(subsequentSources.size > 0) {
-                    const subsequent = sorted.slice(1);
-                    if(!subsequent.some(r => subsequentSources.has((r.src || '').toLowerCase()))) return false;
-                }
-                if(campaign && !j.rows.some(r => r.cmp === campaign || r.rcmp === campaign)) return false;
-                if(country && !j.rows.some(r => r.co === country)) return false;
-                return true;
-            });
-        }
-
         this.buildCustomers();
+
+        this.filteredJourneys = null;
+        this.filteredOrders = null;
+        this.filteredCustomers = null;
+
         this.renderKPIs();
         this.renderFunnel();
-        this.renderTab();
+        if (!skipRender) this.renderTab();
     }
 
     // Groups filtered records by fingerprint into journey path objects
@@ -654,6 +606,7 @@ class Dashboard {
             const dates = rows.map(r=>r.dt).filter(Boolean).sort((a,b)=>this.compareDates(a, b));
             const custOrder = orders.find(o=>o.nm||o.em);
             const revenue = orders.reduce((s,o)=>s+(parseFloat(o.pr)||0),0);
+            const sorted = [...rows].sort((a, b) => (a.dt || '').localeCompare(b.dt || ''));
             this.journeys.push({
                 fp, rows, clicks, convs, orders,
                 count: rows.length,
@@ -668,7 +621,9 @@ class Dashboard {
                 custName: (custOrder||{}).nm||'',
                 custEmail: (custOrder||{}).em||'',
                 custId: (custOrder||{}).cid||'',
-                revenue
+                revenue,
+                firstSource: (sorted[0]||{}).src||'',
+                subsequentSources: [...new Set(sorted.slice(1).map(r => r.src).filter(Boolean))]
             });
         });
         this.journeys.sort((a,b) => this.compareDates(b.lastDate, a.lastDate));
@@ -814,12 +769,14 @@ class Dashboard {
     // --- TABS ---
     switchTab(tab) {
         this.activeTab = tab;
+        this._currentTab = tab;
         document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
         document.querySelectorAll('.tab-body').forEach(t=>t.classList.remove('active'));
         document.querySelector(`.tab-body#tab-${tab}`).classList.add('active');
         const tabs = document.querySelectorAll('.tab');
         const idx = {route:0,orders:1,customers:2,attribution:3}[tab];
         tabs[idx].classList.add('active');
+        this.renderTabFilters();
         this.renderTab();
     }
 
@@ -832,7 +789,7 @@ class Dashboard {
 
     // Renders the Orders tab: sortable table with order ID, date, value, status, customer, fingerprint
     renderOrders() {
-        let data = [...this.fOrders];
+        let data = [...(this.filteredOrders || this.fOrders)];
         const s = this.sortState.orders;
         if(s) data.sort((a,b) => { const av=a[s.f]||'',bv=b[s.f]||''; const c=typeof av==='number'?av-bv:String(av).localeCompare(String(bv)); return s.d==='asc'?c:-c; });
         const start = this.pages.orders * this.pageSize;
@@ -903,8 +860,8 @@ class Dashboard {
         html += '</dl></div>';
         // Journey timeline
         if(touchpoints.length) {
-            html += '<div class="detail-sub">Journey Path ('+touchpoints.length+' touchpoints)</div>';
-            html += this.renderTimeline(touchpoints);
+            html += `<div class="detail-sub">Journey Path (${touchpoints.length} touchpoints)</div>`;
+            html += this.renderTouchpointTable(order.fp, touchpoints);
         }
         document.getElementById('detail-content').innerHTML = html;
         makePanelResizable();
@@ -913,7 +870,7 @@ class Dashboard {
 
     // Renders the Customers tab: sortable table with name, order count, journeys, revenue
     renderCustomers() {
-        let data = [...this.customers];
+        let data = [...(this.filteredCustomers || this.customers)];
         const s = this.sortState.customers;
         if(s) data.sort((a,b) => { const av=a[s.f]||'',bv=b[s.f]||''; const c=typeof av==='number'?av-bv:String(av).localeCompare(String(bv)); return s.d==='asc'?c:-c; });
         const start = this.pages.customers * this.pageSize;
@@ -948,7 +905,7 @@ class Dashboard {
 
     // Renders the Journey Paths tab: each row = one fingerprint with horizontal touchpoint cards
     renderRoute() {
-        let data = [...this.journeys];
+        let data = [...(this.filteredJourneys || this.journeys)];
         const rs = this.routeSort || { field: 'lastDate', dir: 'desc' };
         data.sort((a,b) => {
             const av = a[rs.field] ?? '';
@@ -1184,46 +1141,7 @@ class Dashboard {
             html += `<div style="font-size:12px; margin-bottom:4px;">Customer: <a class="xlink" onclick="${custClick}">${journey.custName||journey.custEmail}</a></div>`;
         }
         html += `<div style="font-size:12px; color:var(--text-dim); margin-bottom:12px;">${journey.count} touchpoints &middot; ${this.fmtDate(journey.firstDate)} → ${this.fmtDate(journey.lastDate)}${journey.revenue ? ' &middot; Revenue: <strong>$'+journey.revenue.toFixed(2)+'</strong>' : ''}</div>`;
-        html += `<div style="overflow-x:auto;">
-            <table class="tp-table">
-                <thead>
-                    <tr>
-                        <th>#</th><th>Type</th><th>Conv. Type</th><th>Date</th><th>Source</th><th>Campaign</th>
-                        <th>Ad Group</th><th>Creative</th><th>Sub5</th><th>Sub6</th><th>Device</th><th>Browser</th><th>OS</th>
-                        <th>Country</th><th>City</th><th>IP</th>
-                        <th>Order</th><th>Customer</th><th>Payout</th><th>Value</th><th>Status</th>
-                    </tr>
-                </thead>
-                <tbody>`;
-
-        touchpoints.forEach((r, i) => {
-            const type = r.t === 'c' ? 'click' : r.t === 'v' ? 'conv' : 'order';
-            const typeBadge = r.t==='c' ? '<span class="badge badge-blue">CLICK</span>'
-                : r.t==='v' ? '<span class="badge badge-orange">CONV</span>'
-                : '<span class="badge badge-green">ORDER</span>';
-
-            const ip = r.click_ip || r.conversion_ip || r.order_ip || r.ip || '';
-            const payout = r.t==='v' && r.pay!=null && r.pay!=='' ? `$${Number(r.pay).toFixed(2)}` : '';
-            const value = r.t==='o' && r.pr!=null && r.pr!=='' ? `$${Number(r.pr).toFixed(2)}` : '';
-            const stBadge = r.t==='o' ? (() => { const b=r.st==='FULFILLED'?'badge-green':r.st==='PENDING'?'badge-orange':'badge-grey'; return `<span class="badge ${b}">${r.st||'N/A'}</span>`; })() : '';
-            const source = r.src || r.fsrc || '';
-            const campaign = r.t==='o' ? (r.rcmp||r.cmp||'') : (r.cmp||'');
-            const adGroup = r.adg || r.s1 || '';
-            const oidLink = r.oid ? `<a class="xlink" onclick="D.navigateToOrder('${r.oid}')">#${r.oid}</a>` : '';
-            const custLink = r.nm ? (r.cid ? `<a class="xlink" onclick="D.navigateToCustomer('${r.cid}')">${r.nm}</a>` : r.nm) : '';
-
-            html += `<tr class="${type}" style="cursor:pointer;" onclick="D.showTouchpoint('${fp}',${i})">
-                    <td>${i+1}</td><td>${typeBadge}</td><td>${r.vt||''}</td><td style="white-space:nowrap;">${this.fmtDate(r.dt)}</td>
-                    <td>${source}</td><td>${campaign}</td><td>${adGroup}</td>
-                    <td>${r.s4||''}</td><td>${r.s5||''}</td><td>${r.s6||''}</td>
-                    <td>${r.dev||''}</td><td>${r.br||''}</td><td>${r.os||''}</td>
-                    <td>${r.co||''}</td><td>${r.ci||''}</td><td>${ip}</td>
-                    <td>${oidLink}</td><td>${custLink}</td>
-                    <td>${payout}</td><td>${value}</td><td>${stBadge}</td>
-                </tr>`;
-        });
-
-        html += `</tbody></table></div>`;
+        html += this.renderTouchpointTable(fp, touchpoints);
         document.getElementById('detail-content').innerHTML = html;
         makePanelResizable();
         document.getElementById('overlay').classList.add('open');
@@ -1570,6 +1488,250 @@ class Dashboard {
         }
     }
 
+    // --- PER-TAB FILTER SYSTEM ---
+
+    // Adds a new empty filter row for the current tab and marks pending
+    addTabFilter() {
+        const tab = this._currentTab;
+        const fields = TAB_FILTER_FIELDS[tab];
+        if (!fields || !fields.length) return;
+        if (!this._tabFilters[tab]) this._tabFilters[tab] = [];
+        this._tabFilters[tab].push({ field: fields[0].key, operator: FILTER_OPERATORS[fields[0].type][0].key, value: '' });
+        this.renderTabFilters();
+        this.markFiltersPending();
+    }
+
+    // Rebuilds the filter rows UI for the current tab
+    renderTabFilters() {
+        const container = document.getElementById('tab-filters-rows');
+        if (!container) return;
+        const tab = this._currentTab;
+        const fields = TAB_FILTER_FIELDS[tab];
+        const filters = this._tabFilters[tab] || [];
+        const addBtn = document.querySelector('.btn-add-filter');
+
+        if (!fields || !fields.length) {
+            container.innerHTML = '';
+            if (addBtn) addBtn.style.display = 'none';
+            return;
+        }
+        if (addBtn) addBtn.style.display = '';
+
+        let html = '';
+        filters.forEach((f, i) => {
+            const fieldDef = fields.find(fd => fd.key === f.field) || fields[0];
+            const operators = FILTER_OPERATORS[fieldDef.type] || [];
+
+            html += '<div class="tab-filter-row">';
+            html += '<select class="tf-field" onchange="D.updateTabFilter(' + i + ',\'field\',this.value)">';
+            fields.forEach(fd => {
+                html += '<option value="' + fd.key + '"' + (fd.key === f.field ? ' selected' : '') + '>' + fd.label + '</option>';
+            });
+            html += '</select>';
+
+            html += '<select class="tf-operator" onchange="D.updateTabFilter(' + i + ',\'operator\',this.value)">';
+            operators.forEach(op => {
+                html += '<option value="' + op.key + '"' + (op.key === f.operator ? ' selected' : '') + '>' + op.label + '</option>';
+            });
+            html += '</select>';
+
+            if (fieldDef.type === 'select') {
+                const uniqueVals = this._getUniqueFilterValues(tab, fieldDef);
+                html += '<select class="tf-value" onchange="D.updateTabFilter(' + i + ',\'value\',this.value)">';
+                html += '<option value="">— select —</option>';
+                uniqueVals.forEach(v => {
+                    const escaped = String(v).replace(/"/g, '&quot;');
+                    html += '<option value="' + escaped + '"' + (v === f.value ? ' selected' : '') + '>' + v + '</option>';
+                });
+                html += '</select>';
+            } else if (fieldDef.type === 'bool') {
+                html += '<select class="tf-value" onchange="D.updateTabFilter(' + i + ',\'value\',this.value)">';
+                html += '<option value="">— select —</option>';
+                html += '<option value="yes"' + (f.value === 'yes' ? ' selected' : '') + '>Yes</option>';
+                html += '<option value="no"' + (f.value === 'no' ? ' selected' : '') + '>No</option>';
+                html += '</select>';
+            } else if (fieldDef.type === 'number' && f.operator === 'between') {
+                const parts = (f.value || '').split(',');
+                html += '<input type="number" class="tf-value" placeholder="min" value="' + (parts[0] || '') + '" onchange="D.updateTabFilterRange(' + i + ',0,this.value)">';
+                html += '<span style="color:var(--text-dim);font-size:12px;">and</span>';
+                html += '<input type="number" class="tf-value" placeholder="max" value="' + (parts[1] || '') + '" onchange="D.updateTabFilterRange(' + i + ',1,this.value)">';
+            } else if (fieldDef.type === 'number') {
+                html += '<input type="number" class="tf-value" placeholder="value" value="' + (f.value || '') + '" onchange="D.updateTabFilter(' + i + ',\'value\',this.value)">';
+            } else {
+                html += '<input type="text" class="tf-value" placeholder="type to filter..." value="' + (f.value || '').replace(/"/g, '&quot;') + '" oninput="D.updateTabFilter(' + i + ',\'value\',this.value)">';
+            }
+
+            html += '<button class="btn-remove-filter" onclick="D.removeTabFilter(' + i + ')" title="Remove filter">×</button>';
+            html += '</div>';
+        });
+
+        container.innerHTML = html;
+    }
+
+    // Collects unique values from current data for a select-type filter dropdown
+    _getUniqueFilterValues(tab, fieldDef) {
+        const values = new Set();
+        if (tab === 'route' && fieldDef.key === 'firstSource') {
+            (this.journeys || []).forEach(j => { if (j.firstSource) values.add(j.firstSource); });
+            return Array.from(values).sort((a, b) => String(a).localeCompare(String(b)));
+        }
+        if (tab === 'route' && fieldDef.key === 'subsequentSource') {
+            (this.journeys || []).forEach(j => { (j.subsequentSources || []).forEach(s => values.add(s)); });
+            return Array.from(values).sort((a, b) => String(a).localeCompare(String(b)));
+        }
+        if (tab === 'route') {
+            if (fieldDef.level === 'journey') {
+                (this.journeys || []).forEach(j => { if (j[fieldDef.key]) values.add(j[fieldDef.key]); });
+            } else {
+                this.filtered.forEach(r => { if (r[fieldDef.key]) values.add(r[fieldDef.key]); });
+            }
+        } else if (tab === 'orders') {
+            this.filtered.filter(r => r.t === 'o').forEach(r => { if (r[fieldDef.key]) values.add(r[fieldDef.key]); });
+        } else if (tab === 'customers') {
+            (this.customers || []).forEach(c => { if (c[fieldDef.key]) values.add(c[fieldDef.key]); });
+        }
+        return Array.from(values).sort((a, b) => String(a).localeCompare(String(b)));
+    }
+
+    // Updates a property on an existing filter row and marks pending
+    updateTabFilter(index, prop, value) {
+        const tab = this._currentTab;
+        const filters = this._tabFilters[tab];
+        if (!filters || !filters[index]) return;
+
+        if (prop === 'field') {
+            const fields = TAB_FILTER_FIELDS[tab];
+            const newFieldDef = fields.find(fd => fd.key === value) || fields[0];
+            const newOps = FILTER_OPERATORS[newFieldDef.type] || [];
+            filters[index].field = value;
+            filters[index].operator = newOps[0] ? newOps[0].key : 'eq';
+            filters[index].value = '';
+            this.renderTabFilters();
+            this.markFiltersPending();
+            return;
+        }
+
+        filters[index][prop] = value;
+        if (prop === 'operator') {
+            this.renderTabFilters();
+        }
+        this.markFiltersPending();
+    }
+
+    // Updates one part of a "between" range filter value and marks pending
+    updateTabFilterRange(index, part, value) {
+        const tab = this._currentTab;
+        const filters = this._tabFilters[tab];
+        if (!filters || !filters[index]) return;
+        const parts = (filters[index].value || ',').split(',');
+        parts[part] = value;
+        filters[index].value = parts.join(',');
+        this.markFiltersPending();
+    }
+
+    // Removes a filter row; auto-applies when all filters gone, otherwise marks pending
+    removeTabFilter(index) {
+        const tab = this._currentTab;
+        if (!this._tabFilters[tab]) return;
+        this._tabFilters[tab].splice(index, 1);
+        this.renderTabFilters();
+        if (this._tabFilters[tab].length === 0) {
+            this.applyFilters();
+        } else {
+            this.markFiltersPending();
+        }
+    }
+
+    // Applies current tab's filters to the appropriate data source and re-renders
+    applyTabFilters() {
+        const tab = this._currentTab;
+        const filters = (this._tabFilters[tab] || []).filter(f => f.value !== '');
+
+        if (tab === 'route') {
+            if (!filters.length) { this.filteredJourneys = null; }
+            else {
+                this.filteredJourneys = (this.journeys || []).filter(j => {
+                    return filters.every(f => this._matchFilter(j, f, 'route'));
+                });
+            }
+            this.pages.route = 0;
+            this.renderRoute();
+        } else if (tab === 'orders') {
+            if (!filters.length) { this.filteredOrders = null; }
+            else {
+                this.filteredOrders = this.fOrders.filter(r => {
+                    return filters.every(f => this._matchFilter(r, f, 'orders'));
+                });
+            }
+            this.pages.orders = 0;
+            this.renderOrders();
+        } else if (tab === 'customers') {
+            if (!filters.length) { this.filteredCustomers = null; }
+            else {
+                this.filteredCustomers = (this.customers || []).filter(c => {
+                    return filters.every(f => this._matchFilter(c, f, 'customers'));
+                });
+            }
+            this.pages.customers = 0;
+            this.renderCustomers();
+        }
+
+        this._updateTabCount();
+    }
+
+    // Tests whether a single item matches a single filter rule
+    _matchFilter(item, filter, tab) {
+        const fields = TAB_FILTER_FIELDS[tab];
+        const fieldDef = fields.find(fd => fd.key === filter.field);
+        if (!fieldDef) return true;
+
+        if (filter.field === 'subsequentSource') {
+            const sources = item.subsequentSources || [];
+            const val = filter.value;
+            if (filter.operator === 'eq') return sources.some(s => s === val);
+            if (filter.operator === 'neq') return !sources.some(s => s === val);
+            return true;
+        }
+
+        let itemVal;
+        if (fieldDef.type === 'bool') {
+            itemVal = item[filter.field] ? 'yes' : 'no';
+        } else if (fieldDef.type === 'number') {
+            itemVal = parseFloat(item[filter.field]) || 0;
+        } else {
+            itemVal = String(item[filter.field] || '');
+        }
+
+        const fv = filter.value;
+        const op = filter.operator;
+
+        switch (op) {
+            case 'eq': return fieldDef.type === 'number' ? itemVal === parseFloat(fv) : itemVal.toLowerCase() === fv.toLowerCase();
+            case 'neq': return fieldDef.type === 'number' ? itemVal !== parseFloat(fv) : itemVal.toLowerCase() !== fv.toLowerCase();
+            case 'contains': return itemVal.toLowerCase().includes(fv.toLowerCase());
+            case 'starts': return itemVal.toLowerCase().startsWith(fv.toLowerCase());
+            case 'gt': return itemVal > parseFloat(fv);
+            case 'lt': return itemVal < parseFloat(fv);
+            case 'between': {
+                const parts = fv.split(',');
+                const min = parseFloat(parts[0]) || -Infinity;
+                const max = parseFloat(parts[1]) || Infinity;
+                return itemVal >= min && itemVal <= max;
+            }
+            default: return true;
+        }
+    }
+
+    // Updates tab count badges to reflect per-tab filtered counts
+    _updateTabCount() {
+        const routeData = this.filteredJourneys || this.journeys || [];
+        const ordersData = this.filteredOrders || this.fOrders || [];
+        const custData = this.filteredCustomers || this.customers || [];
+        document.getElementById('tc-route').textContent = '(' + routeData.length + ')';
+        document.getElementById('tc-orders').textContent = '(' + ordersData.length + ')';
+        document.getElementById('tc-customers').textContent = '(' + custData.length + ')';
+    }
+
     // Switches attribution view between source and campaign
     setAttrView(view) {
         this._attrView = view;
@@ -1699,48 +1861,44 @@ class Dashboard {
         }
     }
 
-    // Renders a vertical timeline of touchpoint cards (used in order detail view)
-    renderTimeline(touchpoints) {
-        let html = '<div class="timeline">';
-        touchpoints.forEach(r => {
-            const type = r.t==='c'?'click':r.t==='v'?'conv':'order';
-            const typeLabel = r.t==='c'?'Click':r.t==='v'?'Conversion':'Order';
-            html += `<div class="tl-item"><div class="tl-dot ${type}"></div><div class="tl-card ${type}">`;
-            html += `<div class="tl-type ${type}">${typeLabel}</div>`;
-            html += `<div class="tl-date">${this.fmtDate(r.dt)}</div>`;
-            html += '<dl class="tl-grid">';
-            if(r.t==='c') {
-                html += this.dlRow('Source',r.src);
-                html += this.dlRow('Campaign',r.cmp);
-                html += this.dlRow('Device',r.dev);
-                html += this.dlRow('Browser',r.br);
-                html += this.dlRow('OS',r.os);
-                html += this.dlRow('Country',r.co);
-                html += this.dlRow('City',r.ci);
-                if(r.s1) html += this.dlRow('Sub1',r.s1);
-                if(r.s2) html += this.dlRow('Sub2',r.s2);
-                if(r.s3) html += this.dlRow('Sub3',r.s3);
-            } else if(r.t==='v') {
-                html += this.dlRow('Type',r.vt);
-                html += this.dlRow('Source',r.src);
-                html += this.dlRow('Campaign',r.cmp);
-                html += this.dlRow('Payout',r.pay?'$'+Number(r.pay).toFixed(2):'');
-                html += this.dlRow('Device',r.dev);
-                html += this.dlRow('Browser',r.br);
-                html += this.dlRow('OS',r.os);
-                html += this.dlRow('Country',r.co);
-                html += this.dlRow('City',r.ci);
-            } else {
-                html += this.dlRow('Order ID',r.oid);
-                html += this.dlRow('Value','$'+(r.pr||0).toFixed(2));
-                html += this.dlRow('Status',r.st);
-                html += this.dlRow('Campaign',r.rcmp);
-                html += this.dlRow('City',r.ci);
-                html += this.dlRow('Country',r.co);
-            }
-            html += '</dl></div></div>';
+    // Compact touchpoint table shared by order detail and journey path panels
+    renderTouchpointTable(fp, touchpoints) {
+        let html = `<div style="overflow-x:auto;">
+            <table class="tp-table">
+                <thead><tr>
+                    <th>#</th><th>Type</th><th>Conv. Type</th><th>Date</th><th>Source</th><th>Campaign</th>
+                    <th>Ad Group</th><th>Creative</th><th>Sub5</th><th>Sub6</th><th>Device</th><th>Browser</th><th>OS</th>
+                    <th>Country</th><th>City</th><th>IP</th>
+                    <th>Order</th><th>Customer</th><th>Payout</th><th>Value</th><th>Status</th>
+                </tr></thead><tbody>`;
+
+        touchpoints.forEach((r, i) => {
+            const type = r.t === 'c' ? 'click' : r.t === 'v' ? 'conv' : 'order';
+            const typeBadge = r.t === 'c' ? '<span class="badge badge-blue">CLICK</span>'
+                : r.t === 'v' ? '<span class="badge badge-orange">CONV</span>'
+                : '<span class="badge badge-green">ORDER</span>';
+            const ip = r.click_ip || r.conversion_ip || r.order_ip || r.ip || '';
+            const payout = r.t === 'v' && r.pay != null && r.pay !== '' ? `$${Number(r.pay).toFixed(2)}` : '';
+            const value = r.t === 'o' && r.pr != null && r.pr !== '' ? `$${Number(r.pr).toFixed(2)}` : '';
+            const stBadge = r.t === 'o' ? (() => { const b = r.st === 'FULFILLED' ? 'badge-green' : r.st === 'PENDING' ? 'badge-orange' : 'badge-grey'; return `<span class="badge ${b}">${r.st || 'N/A'}</span>`; })() : '';
+            const source = r.src || r.fsrc || '';
+            const campaign = r.t === 'o' ? (r.rcmp || r.cmp || '') : (r.cmp || '');
+            const adGroup = r.adg || r.s1 || '';
+            const oidLink = r.oid ? `<a class="xlink" onclick="event.stopPropagation();D.navigateToOrder('${r.oid}')">#${r.oid}</a>` : '';
+            const custLink = r.nm ? (r.cid ? `<a class="xlink" onclick="event.stopPropagation();D.navigateToCustomer('${r.cid}')">${r.nm}</a>` : r.nm) : '';
+
+            html += `<tr class="${type}" style="cursor:pointer;" onclick="D.showTouchpoint('${fp}',${i})">
+                <td>${i + 1}</td><td>${typeBadge}</td><td>${r.vt || ''}</td><td style="white-space:nowrap;">${this.fmtDate(r.dt)}</td>
+                <td>${source}</td><td>${campaign}</td><td>${adGroup}</td>
+                <td>${r.s4 || ''}</td><td>${r.s5 || ''}</td><td>${r.s6 || ''}</td>
+                <td>${r.dev || ''}</td><td>${r.br || ''}</td><td>${r.os || ''}</td>
+                <td>${r.co || ''}</td><td>${r.ci || ''}</td><td>${ip}</td>
+                <td>${oidLink}</td><td>${custLink}</td>
+                <td>${payout}</td><td>${value}</td><td>${stBadge}</td>
+            </tr>`;
         });
-        html += '</div>';
+
+        html += `</tbody></table></div>`;
         return html;
     }
 
@@ -1876,12 +2034,6 @@ class Dashboard {
     }
 }
 
-// Closes any open multi-select dropdown when clicking outside it
-document.addEventListener('click', e => {
-    if(!e.target.closest('.multi-select')) {
-        document.querySelectorAll('.ms-dropdown').forEach(d => d.style.display = 'none');
-    }
-});
 
 // Measures natural column widths (clamped 50–400px), then applies fixed-width layout
 function autoFitColumns(tableEl) {
@@ -2051,6 +2203,8 @@ function makePanelResizable() {
 window.D = {
     filter: () => {},
     clearFilters: () => {},
+    markFiltersPending: () => {},
+    applyFilters: () => {},
     switchTab: () => {},
     sortCol: () => {},
     showOrder: () => {},
@@ -2069,11 +2223,10 @@ window.D = {
     expandRouteRow: () => {},
     navigateToOrder: () => {},
     navigateToCustomer: () => {},
-    toggleMultiSelect: () => {},
-    getSelectedSources: () => new Set(),
-    onMultiSelectChange: () => {},
-    msSelectAll: () => {},
-    msClearAll: () => {},
+    addTabFilter: () => {},
+    updateTabFilter: () => {},
+    updateTabFilterRange: () => {},
+    removeTabFilter: () => {},
     _renderCustomerOrdersBody: () => '',
     _renderCustomerTouchpointsBody: () => '',
     toggleFunnelPanel: () => {},

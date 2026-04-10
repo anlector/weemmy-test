@@ -23,14 +23,11 @@
             <div class="kpi"><div class="kpi-label">Clicks</div><div class="kpi-val" id="kpi-clicks">-</div></div>
         </div>
         <div class="filters">
-            <div class="f-group"><label>From</label><input type="date" id="f-from" onchange="D.filter()"></div>
-            <div class="f-group"><label>To</label><input type="date" id="f-to" onchange="D.filter()"></div>
-            <div class="f-group"><label>Search</label><input type="text" id="f-search" placeholder="Name, email, fingerprint, order ID..." oninput="D.filter()"></div>
-            <div class="f-group"><label>First Source</label><div class="multi-select" id="ms-first-source"><div class="ms-trigger" onclick="D.toggleMultiSelect('ms-first-source')">All Sources ▾</div><div class="ms-dropdown" style="display:none;position:absolute;z-index:50;"></div></div></div>
-            <div class="f-group"><label>Subsequent Source</label><div class="multi-select" id="ms-subsequent-source"><div class="ms-trigger" onclick="D.toggleMultiSelect('ms-subsequent-source')">All Sources ▾</div><div class="ms-dropdown" style="display:none;position:absolute;z-index:50;"></div></div></div>
-            <div class="f-group"><label>Campaign</label><select id="f-campaign" onchange="D.filter()"><option value="">All Campaigns</option></select></div>
-            <div class="f-group"><label>Country</label><select id="f-country" onchange="D.filter()"><option value="">All Countries</option></select></div>
+            <div class="f-group"><label>From</label><input type="date" id="f-from" onchange="D.markFiltersPending()"></div>
+            <div class="f-group"><label>To</label><input type="date" id="f-to" onchange="D.markFiltersPending()"></div>
+            <div class="f-group"><label>Search</label><input type="text" id="f-search" placeholder="Name, email, fingerprint, order ID..." oninput="D.markFiltersPending()"></div>
             <button class="btn-clear" onclick="D.clearFilters()">Clear Filters</button>
+            <button class="btn-apply" id="btn-apply-filters" onclick="D.applyFilters()">Apply Filters</button>
             <button class="btn-funnel-toggle" id="funnel-toggle-btn" onclick="D.toggleFunnelPanel()">Show Conversion Funnel</button>
         </div>
     </div>
@@ -52,6 +49,12 @@
         <div class="tab" onclick="D.switchTab('orders')">Orders<span class="tab-count" id="tc-orders"></span></div>
         <div class="tab" onclick="D.switchTab('customers')">Customers<span class="tab-count" id="tc-customers"></span></div>
         <div class="tab" onclick="D.switchTab('attribution')">Attribution<span class="tab-count" id="tc-attribution"></span></div>
+    </div>
+
+    <!-- PER-TAB FILTERS (Level 2) -->
+    <div class="tab-filters" id="tab-filters">
+        <div class="tab-filters-rows" id="tab-filters-rows"></div>
+        <button class="btn-add-filter" onclick="D.addTabFilter()">+ Add Filter</button>
     </div>
 
     <!-- JOURNEY PATHS TAB -->
