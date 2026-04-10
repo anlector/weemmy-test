@@ -16,7 +16,7 @@ const TAB_FILTER_FIELDS = {
         { key: 'firstSource', label: 'First Source', type: 'select', level: 'journey' },
         { key: 'subsequentSource', label: 'Subsequent Source', type: 'select', level: 'journey' },
         { key: 'cmp', label: 'Campaign', type: 'select', level: 'journey' },
-        { key: 'co', label: 'Country', type: 'select', level: 'record' },
+        { key: 'co', label: 'State', type: 'select', level: 'record' },
         { key: 'hasOrder', label: 'Has Orders', type: 'bool', level: 'journey' },
         { key: 'hasConv', label: 'Has Conversions', type: 'bool', level: 'journey' },
         { key: 'custName', label: 'Customer Name', type: 'text', level: 'journey' },
@@ -141,6 +141,19 @@ const FILTER_OPERATORS = {
     return n;
   }
 
+  // Canonicalizes source names: prefers the Title-cased form to avoid
+  // duplicate dropdown entries like "Facebook" / "facebook"
+  const _srcCanon = {};
+  function canonicalizeSource(src) {
+    if (!src) return src;
+    const key = src.toLowerCase();
+    const existing = _srcCanon[key];
+    // Prefer a form whose first char is uppercase (proper noun / brand)
+    const isTitle = src.charAt(0) !== src.charAt(0).toLowerCase();
+    if (!existing || isTitle) _srcCanon[key] = src;
+    return _srcCanon[key];
+  }
+
   // Maps raw type strings ("click", "order", "conversion", etc.) → "c" / "v" / "o"
   function normalizeType(typeRaw) {
     const type = lc(typeRaw);
@@ -165,13 +178,13 @@ const FILTER_OPERATORS = {
     if (!base) return null;
     const tRaw = getFirst(row, ['t', 'type', 'event_type', 'event']);
     base.t = normalizeType(tRaw) || getFirst(row, ['t']);
-    base.src = getFirst(row, ['src', 'source', 'rt_source', 'lastVisitSource', 'rt_rt_source']);
+    base.src = canonicalizeSource(getFirst(row, ['src', 'source', 'rt_source', 'lastVisitSource', 'rt_rt_source']));
     base.cmp = getFirst(row, ['cmp', 'campaign', 'rt_campaign', 'lastVisitCampaign', 'rt_campaignName']);
     base.vt = getFirst(row, ['vt', 'conversion_type', 'conversionType', 'type_label']);
     base.pay = parseMaybeNumber(getFirst(row, ['pay', 'payout', 'payout_default', 'pub_revenue', 'pub_revenue_default']));
     base.oid = getFirst(row, ['oid', 'orderId', 'order_id', 'shopify_order_id', 'shopify_order_orderId', 'order']);
     base.pr = parseMaybeNumber(getFirst(row, ['pr', 'price', 'payout', 'payout_default', 'payout_network', 'shopify_order_price']));
-    base.st = getFirst(row, ['st', 'status', 'order_status', 'financial_status']);
+    base.st = (getFirst(row, ['st', 'status', 'order_status', 'financial_status']) || '').toUpperCase() || undefined;
     base.cid = getFirst(row, ['cid', 'customerId', 'customer_id', 'shopify_order_customerId', 'user_id']);
     base.nm = getFirst(row, ['nm', 'name', 'customer_name', 'customer']);
     base.em = getFirst(row, ['em', 'email', 'customer_email']);
@@ -207,7 +220,7 @@ const FILTER_OPERATORS = {
     if (!t) return null;
     if (t === 'c') {
       return { t:'c', fp:String(fp), dt:String(dt),
-        src:j.src??j.rt_source??j.source??j.lastVisitSource,
+        src:canonicalizeSource(j.src??j.rt_source??j.source??j.lastVisitSource),
         cmp:j.cmp??j.rt_campaign??j.campaign??j.lastVisitCampaign,
         dev:j.dev??j.device_fullname??j.device??j.device_type,
         br:j.br??j.browser, os:j.os??j.os_fullname,
@@ -223,7 +236,7 @@ const FILTER_OPERATORS = {
       return { t:'v', fp:String(fp), dt:String(dt),
         vt:j.vt??j.type??j.conversion_type??j.conversionType??j.default_type??'',
         pay:parseMaybeNumber(j.pay??j.payout??j.payout_default??j.pub_revenue??j.payout_network),
-        src:j.src??j.rt_source??j.source??j.lastVisitSource,
+        src:canonicalizeSource(j.src??j.rt_source??j.source??j.lastVisitSource),
         cmp:j.cmp??j.rt_campaign??j.campaign??j.lastVisitCampaign,
         dev:j.dev??j.device_fullname??j.device??j.device_type,
         br:j.br??j.browser, os:j.os??j.os_fullname,
@@ -235,7 +248,7 @@ const FILTER_OPERATORS = {
     return { t:'o', fp:String(fp), dt:String(dt),
       oid:j.oid??j.orderId??j.order_id??j.shopify_order_id??j.shopify_order_orderId??j.order,
       pr:parseMaybeNumber(j.pr??j.price??j.payout_default??j.payout??j.payout_network??j.total_price),
-      st:j.st??j.status??j.order_status??j.financial_status,
+      st:((j.st??j.status??j.order_status??j.financial_status)||'').toUpperCase()||undefined,
       cid:j.cid??j.customerId??j.customer_id??j.user_id,
       nm:j.nm??j.customer_name??j.name??j.customer,
       em:j.em??j.customer_email??j.email,
@@ -281,7 +294,7 @@ const FILTER_OPERATORS = {
         const orderRec = {
           t:'o', fp:String(orderFp), dt:String(orderDt), oid:String(orderOid),
           pr:parseMaybeNumber(getFirst(row, ['shopify_order_price', 'shopify_order_pr'])),
-          st:getFirst(row, ['shopify_order_status','shopify_order_st','shopify_order_financial_status']),
+          st:(getFirst(row, ['shopify_order_status','shopify_order_st','shopify_order_financial_status'])||'').toUpperCase()||undefined,
           cid:getFirst(row, ['shopify_order_customerid','shopify_order_customer_id']),
           nm:getFirst(row, ['shopify_order_customer_name','shopify_order_customer']),
           em:getFirst(row, ['shopify_order_customer_email','shopify_order_customer_email_address','shopify_order_email']),
@@ -311,7 +324,7 @@ const FILTER_OPERATORS = {
       if (clickFp && clickDt) {
         const clickRec = {
           t:'c', fp:String(clickFp), dt:String(clickDt),
-          src:getFirst(row, ['click_source']), cmp:getFirst(row, ['click_campaign','click_campaign_id']),
+          src:canonicalizeSource(getFirst(row, ['click_source'])), cmp:getFirst(row, ['click_campaign','click_campaign_id']),
           dev:getFirst(row, ['click_device_fullname','click_device_full','click_device']),
           br:getFirst(row, ['click_browser']), os:getFirst(row, ['click_os']),
           co:getFirst(row, ['click_country']), ci:getFirst(row, ['click_city']),
@@ -338,7 +351,7 @@ const FILTER_OPERATORS = {
           t:'v', fp:String(convFp), dt:String(convDt),
           vt:getFirst(row, ['conversion_type','conversion_event','conversion_default_type']),
           pay:parseMaybeNumber(getFirst(row, ['conversion_payout_default','conversion_payout'])),
-          src:getFirst(row, ['conversion_rt_source','conversion_source']),
+          src:canonicalizeSource(getFirst(row, ['conversion_rt_source','conversion_source'])),
           cmp:getFirst(row, ['conversion_rt_campaign','conversion_campaign']),
           dev:getFirst(row, ['conversion_device_fullname','conversion_device']),
           br:getFirst(row, ['conversion_browser']), os:getFirst(row, ['conversion_os']),
@@ -384,11 +397,11 @@ const FILTER_OPERATORS = {
     if (!base) return null;
     const tRaw = getFirst(row, ['t', 'type', 'event_type', 'event']);
     base.t = normalizeType(tRaw);
-    base.src = getFirst(row, ['src', 'source', 'rt_source']);
+    base.src = canonicalizeSource(getFirst(row, ['src', 'source', 'rt_source']));
     base.cmp = getFirst(row, ['cmp', 'campaign', 'rt_campaign']);
     base.oid = getFirst(row, ['oid', 'orderId', 'order_id', 'order']);
     base.pr = parseMaybeNumber(getFirst(row, ['pr', 'price', 'payout', 'payout_default']));
-    base.st = getFirst(row, ['st', 'status', 'order_status', 'financial_status']);
+    base.st = (getFirst(row, ['st', 'status', 'order_status', 'financial_status']) || '').toUpperCase() || undefined;
     base.cid = getFirst(row, ['cid', 'customerId', 'customer_id', 'user_id']);
     base.nm = getFirst(row, ['nm', 'name', 'customer_name']);
     base.em = getFirst(row, ['em', 'email', 'customer_email']);
@@ -412,7 +425,8 @@ const FILTER_OPERATORS = {
     if (!csvUrl) throw new Error('Missing csvUrl');
     if (!window.Papa) throw new Error('PapaParse is not loaded');
     if (!window.idbCache) throw new Error('idbCache is not loaded');
-    const cacheKey = `csv:${csvUrl}`;
+    const CACHE_VERSION = 3; // bump to invalidate stale cached records
+    const cacheKey = `csv:v${CACHE_VERSION}:${csvUrl}`;
     const cached = await window.idbCache.get(cacheKey);
     if (cached && Array.isArray(cached) && cached.length) return cached;
     const res = await fetch(csvUrl, { method: 'GET' });
@@ -456,7 +470,7 @@ class Dashboard {
         fsrc:'First Source', fmed:'First Medium', lsrc:'Last Source', lmed:'Last Medium',
         s1:'Sub1', s2:'Sub2', s3:'Sub3', s4:'Creative', s5:'Sub5', s6:'Sub6', adg:'Ad Group', plc:'Placement',
         dev:'Device', br:'Browser', os:'OS', ua:'User Agent',
-        co:'Country', ci:'City', ip:'IP Address', isp:'ISP', addr:'Address', zip:'Zip Code',
+        co:'State', ci:'City', ip:'IP Address', isp:'ISP', addr:'Address', zip:'Zip Code',
         nm:'Customer Name', em:'Email', cid:'Customer ID',
         vt:'Conversion Type', pay:'Payout',
         oid:'Order ID', pr:'Price', st:'Status', cur:'Currency', app:'App',
@@ -746,24 +760,11 @@ class Dashboard {
         if (isHidden) this.renderFunnel();
     }
 
-    // Updates the 5 KPI cards and tab counts
+    // Updates tab count badges
     renderKPIs() {
-        const fps = new Set();
-        this.filtered.forEach(r => { if(r.fp) fps.add(r.fp); });
-        const custs = new Set();
-        this.fOrders.forEach(o => { if(o.cid) custs.add(o.cid); });
-        document.getElementById('kpi-journeys').textContent = fps.size.toLocaleString();
-        document.getElementById('kpi-customers').textContent = custs.size.toLocaleString();
-        document.getElementById('kpi-orders').textContent = this.fOrders.length.toLocaleString();
-        document.getElementById('kpi-conversions').textContent = this.fConvs.length.toLocaleString();
-        document.getElementById('kpi-clicks').textContent = this.fClicks.length.toLocaleString();
         document.getElementById('tc-orders').textContent = '('+this.fOrders.length+')';
         document.getElementById('tc-customers').textContent = '('+this.customers.length+')';
         document.getElementById('tc-route').textContent = '('+this.journeys.length+')';
-        const attrSrcs = new Set();
-        this.filtered.forEach(r => { if(r.t==='c' && r.src) attrSrcs.add(r.src); });
-        const tcAttr = document.getElementById('tc-attribution');
-        if(tcAttr) tcAttr.textContent = '('+attrSrcs.size+')';
     }
 
     // --- TABS ---
@@ -845,7 +846,7 @@ class Dashboard {
         html += this.dlRow('App',order.app);
         html += this.dlRow('Campaign',order.rcmp);
         html += this.dlRow('City',order.ci);
-        html += this.dlRow('Country',order.co);
+        html += this.dlRow('State',order.co);
         html += this.dlRow('Currency',order.cur);
         if(order.fp) html += this.dlRow('Fingerprint',`<a class="xlink" onclick="D.navigateToFingerprint('${order.fp}')">${order.fp}</a>`);
         html += '</dl></div>';
@@ -1231,11 +1232,20 @@ class Dashboard {
         // ALL keys across the entire dataset
         const allKeys = new Set(this.getAllRecordKeys());
 
-        const mkItem = (k, inRecord) => {
-            const label = Dashboard.LABEL_MAP[k] || k;
+        const stripFieldPrefix = (name) => {
+            if (name.startsWith('shopify_order_')) return name.slice(14);
+            if (name.startsWith('conversion_')) return name.slice(11);
+            if (name.startsWith('click_')) return name.slice(6);
+            return name;
+        };
+
+        const mkItem = (k, inRecord, isRawGroup) => {
+            const label = isRawGroup ? stripFieldPrefix(k) : (Dashboard.LABEL_MAP[k] || k);
             const checked = this.isFieldVisible(k) ? 'checked' : '';
             const dimStyle = inRecord ? '' : 'opacity:0.45;';
-            const title = inRecord ? '' : `title="No value in this touchpoint"`;
+            const tooltipParts = [k];
+            if (!inRecord) tooltipParts.push('No value in this touchpoint');
+            const title = `title="${tooltipParts.join(' — ')}"`;
             return `<div class="tp-cfg-item" style="${dimStyle}" ${title}>
                 <input type="checkbox" id="tpcfg_${CSS.escape(k)}" ${checked} onchange="D.toggleTpField('${k}','${fp}',${index})">
                 <label for="tpcfg_${CSS.escape(k)}">${label}</label>
@@ -1257,16 +1267,16 @@ class Dashboard {
                 keys = g.keys.filter(k => allKeys.has(k));
             }
             keys.forEach(k => assignedKeys.add(k));
-            if(keys.length) groups.push({ label: g.label, keys });
+            if(keys.length) groups.push({ label: g.label, keys, isRaw: !!g.prefix });
         });
 
         // Anything left that didn't match any group
         const otherKeys = [...allKeys].filter(k => !assignedKeys.has(k)).sort();
-        if(otherKeys.length) groups.push({ label: 'Other', keys: otherKeys });
+        if(otherKeys.length) groups.push({ label: 'Other', keys: otherKeys, isRaw: false });
 
         let groupsHtml = '';
         groups.forEach(g => {
-            const itemsHtml = g.keys.map(k => mkItem(k, presentInRecord.has(k))).join('');
+            const itemsHtml = g.keys.map(k => mkItem(k, presentInRecord.has(k), g.isRaw)).join('');
             groupsHtml += `<div class="tp-cfg-group">
                 <div class="tp-cfg-group-title">${g.label} <span style="font-weight:400;opacity:0.6;">(${g.keys.length})</span></div>
                 ${itemsHtml}
@@ -1428,7 +1438,7 @@ class Dashboard {
                     <tr>
                         <th>#</th><th>Order ID</th><th style="cursor:pointer;" id="cust-orders-date-th" class="sort-asc">Date ↑</th><th>Value</th><th>Status</th>
                         <th>Campaign</th><th>First Source</th><th>Last Source</th>
-                        <th>App</th><th>City</th><th>Country</th><th>Currency</th>
+                        <th>App</th><th>City</th><th>State</th><th>Currency</th>
                     </tr>
                 </thead>
                 <tbody>`;
@@ -1449,7 +1459,7 @@ class Dashboard {
                     <tr>
                         <th>#</th><th>Type</th><th>Conv. Type</th><th style="cursor:pointer;" id="cust-tp-date-th" class="sort-asc">Date ↑</th><th>Fingerprint</th><th>Source</th><th>Campaign</th>
                         <th>Ad Group</th><th>Creative</th><th>Device</th><th>Browser</th><th>OS</th>
-                        <th>Country</th><th>City</th><th>IP</th>
+                        <th>State</th><th>City</th><th>IP</th>
                         <th>Order</th><th>Customer</th><th>Payout</th><th>Value</th><th>Status</th>
                     </tr>
                 </thead>
@@ -1843,8 +1853,6 @@ class Dashboard {
         });
         tbody.innerHTML = html;
 
-        const tcEl = document.getElementById('tc-attribution');
-        if (tcEl) tcEl.textContent = ' (' + sorted.length + ')';
         if (summary) {
             summary.textContent = totalConverting + ' converting journeys analyzed across ' + sorted.length + ' ' + label.toLowerCase() + 's';
         }
@@ -1868,9 +1876,9 @@ class Dashboard {
                 <thead><tr>
                     <th>#</th><th>Type</th><th>Conv. Type</th><th>Date</th><th>Source</th><th>Campaign</th>
                     <th>Ad Group</th><th>Creative</th><th>Sub5</th><th>Sub6</th><th>Device</th><th>Browser</th><th>OS</th>
-                    <th>Country</th><th>City</th><th>IP</th>
-                    <th>Order</th><th>Customer</th><th>Payout</th><th>Value</th><th>Status</th>
-                </tr></thead><tbody>`;
+                        <th>State</th><th>City</th><th>IP</th>
+                        <th>Order</th><th>Customer</th><th>Payout</th><th>Value</th><th>Status</th>
+                    </tr></thead><tbody>`;
 
         touchpoints.forEach((r, i) => {
             const type = r.t === 'c' ? 'click' : r.t === 'v' ? 'conv' : 'order';

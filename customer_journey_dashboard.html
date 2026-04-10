@@ -15,13 +15,7 @@
     <!-- MANAGEMENT PANEL -->
     <div class="mgmt">
         <div class="mgmt-title">Customer Journey Dashboard <span>WEEM Analytics</span></div>
-        <div class="kpis">
-            <div class="kpi"><div class="kpi-label">Journey Paths</div><div class="kpi-val" id="kpi-journeys">-</div></div>
-            <div class="kpi"><div class="kpi-label">Customers</div><div class="kpi-val" id="kpi-customers">-</div></div>
-            <div class="kpi"><div class="kpi-label">Orders</div><div class="kpi-val" id="kpi-orders">-</div></div>
-            <div class="kpi"><div class="kpi-label">Conversions</div><div class="kpi-val" id="kpi-conversions">-</div></div>
-            <div class="kpi"><div class="kpi-label">Clicks</div><div class="kpi-val" id="kpi-clicks">-</div></div>
-        </div>
+
         <div class="filters">
             <div class="f-group"><label>From</label><input type="date" id="f-from" onchange="D.markFiltersPending()"></div>
             <div class="f-group"><label>To</label><input type="date" id="f-to" onchange="D.markFiltersPending()"></div>
@@ -48,7 +42,7 @@
         <div class="tab active" onclick="D.switchTab('route')">Journey Paths<span class="tab-count" id="tc-route"></span></div>
         <div class="tab" onclick="D.switchTab('orders')">Orders<span class="tab-count" id="tc-orders"></span></div>
         <div class="tab" onclick="D.switchTab('customers')">Customers<span class="tab-count" id="tc-customers"></span></div>
-        <div class="tab" onclick="D.switchTab('attribution')">Attribution<span class="tab-count" id="tc-attribution"></span></div>
+        <div class="tab" onclick="D.switchTab('attribution')">Attribution</div>
     </div>
 
     <!-- PER-TAB FILTERS (Level 2) -->
