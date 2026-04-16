@@ -512,6 +512,9 @@ class Dashboard {
         this.filteredJourneys = null;
         this.filteredOrders = null;
         this.filteredCustomers = null;
+        this._panelHistory = [];
+        this._currentPanelView = null;
+        this._skipPanelPush = false;
         // Load saved field visibility config from localStorage
         // tpHiddenFields: Set of field keys the user has chosen to hide
         try {
@@ -530,6 +533,42 @@ class Dashboard {
 
     isFieldVisible(key) {
         return !this.tpHiddenFields.has(key);
+    }
+
+    _pushPanelState(method, args) {
+        const panel = document.querySelector('.detail-panel');
+        this._panelHistory.push({
+            method,
+            args,
+            scrollTop: panel ? panel.scrollTop : 0
+        });
+    }
+
+    _trackPanelView(method, args) {
+        if (!this._skipPanelPush && this._currentPanelView) {
+            this._pushPanelState(this._currentPanelView.method, this._currentPanelView.args);
+        }
+        this._currentPanelView = { method, args };
+    }
+
+    _panelHeaderHtml() {
+        const backBtn = this._panelHistory.length > 0
+            ? '<button class="detail-back" onclick="D.panelGoBack()">← Back</button>'
+            : '<span></span>';
+        return `<div class="detail-header">${backBtn}<button class="detail-close" onclick="D.closeDetail()">×</button></div>`;
+    }
+
+    panelGoBack() {
+        if (!this._panelHistory.length) return;
+        const prev = this._panelHistory.pop();
+        this._skipPanelPush = true;
+        this._currentPanelView = { method: prev.method, args: prev.args };
+        this[prev.method](...prev.args);
+        this._skipPanelPush = false;
+        requestAnimationFrame(() => {
+            const panel = document.querySelector('.detail-panel');
+            if (panel) panel.scrollTop = prev.scrollTop;
+        });
     }
 
     // Collect every unique field key that exists anywhere in the dataset
@@ -836,11 +875,13 @@ class Dashboard {
     showOrder(oid) {
         const order = this.fOrders.find(o=>o.oid===oid);
         if(!order) return;
+        this._trackPanelView('showOrder', [oid]);
         // Get journey for this order
         const touchpoints = order.fp ? this.raw.filter(r=>r.fp===order.fp) : [];
         touchpoints.sort((a,b)=>this.compareDates(a.dt, b.dt));
 
-        let html = `<div class="detail-title">Order #${order.oid}</div>`;
+        let html = this._panelHeaderHtml();
+        html += `<div class="detail-title">Order #${order.oid}</div>`;
         html += '<div class="cust-card"><h4>Order Details</h4><dl class="cust-grid">';
         html += this.dlRow('Value','$'+(order.pr||0).toFixed(2));
         html += this.dlRow('Status',order.st);
@@ -1135,9 +1176,11 @@ class Dashboard {
     showJourneyPathsTable(fp) {
         const journey = this.journeys.find(j=>j.fp===fp);
         if(!journey) return;
+        this._trackPanelView('showJourneyPathsTable', [fp]);
         const touchpoints = [...journey.rows].sort((a,b)=>this.compareDates(a.dt, b.dt));
 
-        let html = `<div class="detail-title">Journey Path</div>`;
+        let html = this._panelHeaderHtml();
+        html += `<div class="detail-title">Journey Path</div>`;
         html += `<div style="color:var(--text-dim); font-size:12px; margin-bottom:4px;">Fingerprint: <a class="xlink" onclick="D.navigateToFingerprint('${fp}')" style="font-size:12px;">${fp}</a></div>`;
         if(journey.custName || journey.custEmail) {
             const custClick = journey.custId ? `D.navigateToCustomer('${journey.custId}')` : '';
@@ -1157,6 +1200,7 @@ class Dashboard {
         const touchpoints = [...journey.rows].sort((a,b)=>this.compareDates(a.dt, b.dt));
         const r = touchpoints[index];
         if(!r) return;
+        this._trackPanelView('showTouchpoint', [fp, index]);
 
         const type = r.t === 'c' ? 'click' : r.t === 'v' ? 'conv' : 'order';
         const typeBadgeClass = type === 'click' ? 'badge-blue' : type === 'conv' ? 'badge-orange' : 'badge-green';
@@ -1198,7 +1242,8 @@ class Dashboard {
             ? `<span style="background:#fef3c7;color:#92400e;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:700;margin-left:6px;">${hiddenCount} hidden</span>`
             : '';
 
-        let html = `<div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;">
+        let html = this._panelHeaderHtml();
+        html += `<div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;">
             <span class="badge ${typeBadgeClass}">${typeLabel}</span>
             <span style="color:var(--text-dim);font-weight:700;">${this.fmtDate(r.dt)}</span>
         </div>`;
@@ -1418,8 +1463,10 @@ class Dashboard {
     showCustomer(cid) {
         const cust = this.customers.find(c=>c.cid===cid);
         if(!cust) return;
+        this._trackPanelView('showCustomer', [cid]);
 
-        let html = `<div class="detail-title">${cust.nm}</div>`;
+        let html = this._panelHeaderHtml();
+        html += `<div class="detail-title">${cust.nm}</div>`;
         // Profile
         html += '<div class="cust-card"><h4>Profile</h4><dl class="cust-grid">';
         html += this.dlRow('Email',cust.em);
@@ -2040,35 +2087,26 @@ class Dashboard {
         this.renderTab();
     }
 
-    // Cross-link: closes current panel, opens journey path table for a fingerprint
+    // Cross-link: navigates within the panel to a fingerprint's journey detail
     navigateToFingerprint(fp) {
-        this.closeDetail();
         this.showJourneyPathsTable(fp);
     }
 
-    // Cross-link: closes current panel, switches to Orders tab, opens order detail
+    // Cross-link: navigates within the panel to an order detail
     navigateToOrder(oid) {
-        this.closeDetail();
-        this.switchTab('orders');
-        setTimeout(() => {
-            const order = this.fOrders.find(o=>String(o.oid)===String(oid));
-            if(order) this.showOrder(oid);
-        }, 100);
+        this.showOrder(oid);
     }
 
-    // Cross-link: closes current panel, switches to Customers tab, opens customer detail
+    // Cross-link: navigates within the panel to a customer detail
     navigateToCustomer(cid) {
-        this.closeDetail();
-        this.switchTab('customers');
-        setTimeout(() => {
-            const cust = this.customers.find(c=>c.cid===cid);
-            if(cust) this.showCustomer(cid);
-        }, 100);
+        this.showCustomer(cid);
     }
 
-    // Closes the side panel overlay
+    // Closes the side panel overlay and clears navigation history
     closeDetail() {
         document.getElementById('overlay').classList.remove('open');
+        this._panelHistory = [];
+        this._currentPanelView = null;
     }
 }
 
@@ -2275,6 +2313,7 @@ window.D = {
     expandRouteRow: () => {},
     navigateToOrder: () => {},
     navigateToCustomer: () => {},
+    panelGoBack: () => {},
     addTabFilter: () => {},
     updateTabFilter: () => {},
     updateTabFilterRange: () => {},

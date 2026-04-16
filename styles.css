@@ -90,8 +90,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto
 .overlay.open { display:flex; }
 .overlay-bg { position:absolute; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.3); }
 .detail-panel { position:absolute; top:0; right:0; bottom:0; width:75vw; max-width:100%; background:var(--bg); overflow-y:auto; box-shadow:-4px 0 20px rgba(0,0,0,0.15); padding:24px; z-index:1; }
-.detail-close { position:absolute; top:16px; right:16px; width:32px; height:32px; border-radius:50%; border:none; background:#f3f4f6; cursor:pointer; font-size:18px; display:flex; align-items:center; justify-content:center; z-index:2; }
+.detail-header { display:flex; justify-content:space-between; align-items:center; padding:0 0 8px; position:sticky; top:0; background:var(--bg); z-index:2; }
+.detail-close { width:32px; height:32px; border-radius:50%; border:none; background:#f3f4f6; cursor:pointer; font-size:18px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
 .detail-close:hover { background:#e5e7eb; }
+.detail-back { background:none; border:none; color:#007892; font-size:0.9rem; font-weight:500; cursor:pointer; padding:4px 8px; border-radius:4px; }
+.detail-back:hover { background:rgba(0,120,146,0.08); }
 
 /* Timeline */
 .timeline { position:relative; padding-left:28px; }
