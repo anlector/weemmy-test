@@ -154,6 +154,13 @@ const FILTER_OPERATORS = {
     return _srcCanon[key];
   }
 
+  // Appends 'Z' to bare datetime strings (no timezone) so JS parses them as UTC
+  function normalizeTimestamp(ts) {
+    if (!ts || typeof ts !== 'string') return ts;
+    if (/[+-]\d{2}:\d{2}$/.test(ts) || ts.endsWith('Z')) return ts;
+    return ts.trim().replace(' ', 'T') + 'Z';
+  }
+
   // Maps raw type strings ("click", "order", "conversion", etc.) → "c" / "v" / "o"
   function normalizeType(typeRaw) {
     const type = lc(typeRaw);
@@ -206,6 +213,7 @@ const FILTER_OPERATORS = {
     base.cur = getFirst(row, ['cur', 'currency', 'order_currency']);
     if (base.pr !== undefined && base.pr !== null) base.pr = Number(base.pr);
     if (base.pay !== undefined && base.pay !== null) base.pay = Number(base.pay);
+    if (base.t === 'o') base.dt = normalizeTimestamp(base.dt);
     return base.t ? base : null;
   }
 
@@ -246,7 +254,7 @@ const FILTER_OPERATORS = {
         s5:j.s5??j.sub5??j.rt_sub5??j.sub_5,
         s6:j.s6??j.sub6??j.rt_sub6??j.sub_6 };
     }
-    return { t:'o', fp:String(fp), dt:String(dt),
+    return { t:'o', fp:String(fp), dt:normalizeTimestamp(String(dt)),
       oid:j.oid??j.orderId??j.order_id??j.shopify_order_id??j.shopify_order_orderId??j.order,
       pr:parseMaybeNumber(j.pr??j.price??j.payout_default??j.payout??j.payout_network??j.total_price),
       st:((j.st??j.status??j.order_status??j.financial_status)||'').toUpperCase()||undefined,
@@ -293,7 +301,7 @@ const FILTER_OPERATORS = {
       const orderDt = getFirst(row, ['shopify_order_createdat', 'shopify_order_processedat']);
       if (orderOid && orderFp && orderDt) {
         const orderRec = {
-          t:'o', fp:String(orderFp), dt:String(orderDt), oid:String(orderOid),
+          t:'o', fp:String(orderFp), dt:normalizeTimestamp(String(orderDt)), oid:String(orderOid),
           pr:parseMaybeNumber(getFirst(row, ['shopify_order_price', 'shopify_order_pr'])),
           st:(getFirst(row, ['shopify_order_status','shopify_order_st','shopify_order_financial_status'])||'').toUpperCase()||undefined,
           cid:getFirst(row, ['shopify_order_customerid','shopify_order_customer_id']),
@@ -418,6 +426,7 @@ const FILTER_OPERATORS = {
     base.s5 = getFirst(row, ['s5', 'sub5', 'rt_sub5']);
     base.s6 = getFirst(row, ['s6', 'sub6', 'rt_sub6']);
     if (!base.t) return null;
+    if (base.t === 'o') base.dt = normalizeTimestamp(base.dt);
     return base;
   }
 
@@ -427,7 +436,7 @@ const FILTER_OPERATORS = {
     if (!csvUrl) throw new Error('Missing csvUrl');
     if (!window.Papa) throw new Error('PapaParse is not loaded');
     if (!window.idbCache) throw new Error('idbCache is not loaded');
-    const CACHE_VERSION = 4; // bump to invalidate stale cached records
+    const CACHE_VERSION = 5; // bump to invalidate stale cached records
     const cacheKey = `csv:v${CACHE_VERSION}:${csvUrl}`;
     const cached = await window.idbCache.get(cacheKey);
     if (cached && Array.isArray(cached) && cached.length) return cached;
@@ -2064,22 +2073,16 @@ class Dashboard {
         let dt = new Date(d);
         if(!isNaN(dt) && dt.getFullYear() >= 2000) return dt;
         const s = String(d).trim();
-        // DD/MM/YYYY HH:MM or DD/MM/YYYY
+        // MM/DD/YYYY HH:MM or MM/DD/YYYY
         let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[T ](\d{2}):(\d{2}))?/);
         if(m) {
-            dt = new Date(+m[3], +m[2]-1, +m[1], +(m[4]||0), +(m[5]||0));
+            dt = new Date(+m[3], +m[1]-1, +m[2], +(m[4]||0), +(m[5]||0));
             if(!isNaN(dt) && dt.getFullYear() >= 2000) return dt;
         }
         // YYYY-MM-DD HH:MM:SS or YYYY-MM-DDTHH:MM:SS
         m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/);
         if(m) {
             dt = new Date(+m[1], +m[2]-1, +m[3], +(m[4]||0), +(m[5]||0), +(m[6]||0));
-            if(!isNaN(dt) && dt.getFullYear() >= 2000) return dt;
-        }
-        // MM/DD/YYYY HH:MM
-        m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[T ](\d{2}):(\d{2}))?/);
-        if(m) {
-            dt = new Date(+m[3], +m[1]-1, +m[2], +(m[4]||0), +(m[5]||0));
             if(!isNaN(dt) && dt.getFullYear() >= 2000) return dt;
         }
         return null;
@@ -2095,7 +2098,7 @@ class Dashboard {
         return String(a||'').localeCompare(String(b||''));
     }
 
-    // Formats date as "DD/MM/YYYY HH:MM"
+    // Formats date as "MM/DD/YYYY HH:MM"
     fmtDate(d) {
         if(!d) return '';
         const dt = this.parseDate(d);
@@ -2105,7 +2108,7 @@ class Dashboard {
         const yy = dt.getFullYear();
         const hh = String(dt.getHours()).padStart(2,'0');
         const mi = String(dt.getMinutes()).padStart(2,'0');
-        return `${dd}/${mm}/${yy} ${hh}:${mi}`;
+        return `${mm}/${dd}/${yy} ${hh}:${mi}`;
     }
 
     // Short date for the Journey Paths first column.
