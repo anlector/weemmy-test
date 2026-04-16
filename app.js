@@ -528,6 +528,7 @@ class Dashboard {
             attribution: { history: [], current: null, scrollTop: 0 },
         };
         this._skipPanelPush = false;
+        this._hideSubscriptions = false;
         // Load saved field visibility config from localStorage
         // tpHiddenFields: Set of field keys the user has chosen to hide
         try {
@@ -546,6 +547,33 @@ class Dashboard {
 
     isFieldVisible(key) {
         return !this.tpHiddenFields.has(key);
+    }
+
+    isSubscription(r) {
+        return r.t === 'o' && r.app && r.app.toLowerCase().includes('recharge');
+    }
+
+    isSubscriptionAction(r) {
+        if (r.t !== 'v' || !r.vt) return false;
+        const vt = r.vt.toLowerCase();
+        return vt === 'recurring' || vt === 'shipping';
+    }
+
+    classifyTouchpoint(r, firstOrderTs) {
+        if (firstOrderTs == null) return 'pre';
+        const rTime = this.parseDate(r.dt);
+        if (!rTime) return 'pre';
+        const rTs = rTime.getTime();
+        if (r.t === 'o' && Math.abs(rTs - firstOrderTs) < 1000) return 'first';
+        if (rTs < firstOrderTs) return 'pre';
+        return 'post';
+    }
+
+    toggleSubscriptions() {
+        this._hideSubscriptions = !this._hideSubscriptions;
+        const cb = document.getElementById('hide-subs-toggle');
+        if (cb) cb.checked = this._hideSubscriptions;
+        this.applyFilters();
     }
 
     _panelState() {
@@ -585,7 +613,6 @@ class Dashboard {
         const container = document.getElementById('detail-container');
         container.innerHTML = `${this._panelHeaderHtml()}<div class="detail-content">${html}</div>`;
         container.classList.add('open');
-        container.style.display = '';
         this._hideActiveTabBody();
         window.scrollTo({ top: 0, behavior: 'instant' });
     }
@@ -682,6 +709,9 @@ class Dashboard {
         this.fClicks = this.filtered.filter(r=>r.t==='c');
         this.fConvs = this.filtered.filter(r=>r.t==='v');
         this.fOrders = this.filtered.filter(r=>r.t==='o');
+        if (this._hideSubscriptions) {
+            this.fOrders = this.fOrders.filter(r => !this.isSubscription(r));
+        }
         this.pages = {orders:0, customers:0, route:0};
 
         this.buildJourneys();
@@ -713,6 +743,8 @@ class Dashboard {
             const custOrder = orders.find(o=>o.nm||o.em);
             const revenue = orders.reduce((s,o)=>s+(parseFloat(o.pr)||0),0);
             const sorted = [...rows].sort((a, b) => (a.dt || '').localeCompare(b.dt || ''));
+            const orderDates = orders.map(o => ({ dt: o.dt, parsed: this.parseDate(o.dt) })).filter(o => o.parsed).sort((a, b) => a.parsed - b.parsed);
+            const firstOrderTs = orderDates.length > 0 ? orderDates[0].parsed.getTime() : null;
             this.journeys.push({
                 fp, rows, clicks, convs, orders,
                 count: rows.length,
@@ -728,6 +760,7 @@ class Dashboard {
                 custEmail: (custOrder||{}).em||'',
                 custId: (custOrder||{}).cid||'',
                 revenue,
+                firstOrderTs,
                 firstSource: (sorted[0]||{}).src||'',
                 subsequentSources: [...new Set(sorted.slice(1).map(r => r.src).filter(Boolean))]
             });
@@ -754,6 +787,8 @@ class Dashboard {
             });
             const rev = c.orders.reduce((s,o)=>s+(o.pr||0),0);
             const dates = c.orders.map(o=>o.dt).filter(Boolean).sort((a,b)=>this.compareDates(a, b));
+            const allOrderDates = c.orders.map(o => this.parseDate(o.dt)).filter(Boolean).sort((a, b) => a - b);
+            const firstOrderTs = allOrderDates.length > 0 ? allOrderDates[0].getTime() : null;
             this.customers.push({
                 cid:c.cid, nm:c.nm||'Unknown', em:c.em||'',
                 orderCount: c.orders.length,
@@ -762,6 +797,7 @@ class Dashboard {
                 revenue: rev,
                 firstSeen: dates[0]||'',
                 lastSeen: dates[dates.length-1]||'',
+                firstOrderTs,
                 fps: [...c.fps],
                 orders: c.orders
             });
@@ -881,7 +917,6 @@ class Dashboard {
         if (container) {
             container.classList.remove('open');
             container.innerHTML = '';
-            container.style.display = 'none';
         }
         this._showActiveTabBody();
 
@@ -920,7 +955,7 @@ class Dashboard {
         let html = '<table class="tbl"><thead><tr>';
         const cols = [
             {f:'oid',l:'Order ID'},{f:'dt',l:'Date'},{f:'pr',l:'Value'},{f:'st',l:'Status'},
-            {f:'nm',l:'Customer'},{f:'fp',l:'Fingerprint'},{f:'rcmp',l:'Campaign'},{f:'fsrc',l:'First Source'}
+            {f:'app',l:'App'},{f:'nm',l:'Customer'},{f:'fp',l:'Fingerprint'},{f:'rcmp',l:'Campaign'},{f:'fsrc',l:'First Source'}
         ];
         cols.forEach(c => {
             const cls = s&&s.f===c.f ? (s.d==='asc'?'sort-asc':'sort-desc') : '';
@@ -929,15 +964,19 @@ class Dashboard {
         html += '</tr></thead><tbody>';
         page.forEach(r => {
             const stBadge = r.st==='FULFILLED'?'badge-green':r.st==='PENDING'?'badge-orange':'badge-grey';
+            const isSub = this.isSubscription(r);
+            const subBadge = isSub ? ' <span class="badge badge-subscription">Subscription</span>' : '';
+            const rowClass = isSub ? 'subscription-row' : '';
             const custCell = r.cid
                 ? `<a class="xlink" onclick="event.stopPropagation();D.navigateToCustomer('${r.cid}')">${r.nm||''}</a>${r.em?'<br><small style="color:var(--text-dim)">'+r.em+'</small>':''}`
                 : `${r.nm||''}${r.em?'<br><small style="color:var(--text-dim)">'+r.em+'</small>':''}`;
             const fpCell = r.fp ? `<a class="xlink" onclick="event.stopPropagation();D.navigateToFingerprint('${r.fp}')" style="font-family:monospace;font-size:12px;">${r.fp}</a>` : '';
-            html += `<tr onclick="D.showOrder('${r.oid}')">
+            html += `<tr class="${rowClass}" onclick="D.showOrder('${r.oid}')">
                 <td>${r.oid||''}</td>
                 <td>${this.fmtDate(r.dt)}</td>
                 <td><strong>$${(r.pr||0).toFixed(2)}</strong></td>
                 <td><span class="badge ${stBadge}">${r.st||'N/A'}</span></td>
+                <td>${(r.app||'')}${subBadge}</td>
                 <td>${custCell}</td>
                 <td>${fpCell}</td>
                 <td>${r.rcmp||''}</td>
@@ -964,7 +1003,9 @@ class Dashboard {
         html += this.dlRow('Value','$'+(order.pr||0).toFixed(2));
         html += this.dlRow('Status',order.st);
         html += this.dlRow('Date',this.fmtDate(order.dt));
-        html += this.dlRow('App',order.app);
+        const appLabel = order.app || '';
+        const subTag = this.isSubscription(order) ? ' <span class="badge badge-subscription">Subscription</span>' : '';
+        html += this.dlRow('App', appLabel + subTag);
         html += this.dlRow('Campaign',order.rcmp);
         html += this.dlRow('City',order.ci);
         html += this.dlRow('State',order.co);
@@ -982,8 +1023,9 @@ class Dashboard {
         html += '</dl></div>';
         // Journey timeline
         if(touchpoints.length) {
+            const orderJourney = order.fp ? this.journeys.find(j => j.fp === order.fp) : null;
             html += `<div class="detail-sub">Journey Path (${touchpoints.length} touchpoints)</div>`;
-            html += this.renderTouchpointTable(order.fp, touchpoints);
+            html += this.renderTouchpointTable(order.fp, touchpoints, orderJourney ? orderJourney.firstOrderTs : null);
         }
         this._openDetailContainer(html);
         makePanelResizable();
@@ -1075,19 +1117,52 @@ class Dashboard {
                 }
             }
 
+            let ttfpHtml = '';
+            if (j.firstOrderTs && j.firstDate) {
+                const firstTpTime = this.parseDate(j.firstDate);
+                if (firstTpTime) {
+                    const diffMs = j.firstOrderTs - firstTpTime.getTime();
+                    if (diffMs >= 0) {
+                        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                        const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                        const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                        let ttfpLabel = '';
+                        if (diffDays > 0) ttfpLabel = `${diffDays}d ${diffHours}h`;
+                        else if (diffHours > 0) ttfpLabel = `${diffHours}h ${diffMins}m`;
+                        else ttfpLabel = `${diffMins}m`;
+                        ttfpHtml = `<div class="route-meta" style="color:#92400e;">⏱ ${ttfpLabel} to 1st purchase</div>`;
+                    }
+                }
+            }
+
             html += `<div class="route-row">
                 <div class="route-fp" onclick="D.showJourneyPathsTable('${j.fp}')">
                     <div style="font-weight:800; font-size:14px;">#${rowNum}</div>
                     <div class="route-meta">${j.count} touchpoints</div>
                     <div class="route-meta">${dateRange}</div>
                     ${j.revenue ? `<div class="route-meta" style="font-weight:700;color:var(--green);">$${j.revenue.toFixed(2)}</div>` : ''}
+                    ${ttfpHtml}
                     ${custHtml}
                 </div>
                 <div class="route-cells">`;
 
+            let insertedDivider = false;
             visible.forEach((r, tpIndex) => {
+                const isSub = this.isSubscription(r);
                 const type = r.t === 'c' ? 'click' : r.t === 'v' ? 'conv' : 'order';
-                const typeLabel = r.t === 'c' ? 'CLICK' : r.t === 'v' ? 'ACTION' : 'PURCHASE';
+                const typeLabel = r.t === 'c' ? 'CLICK' : r.t === 'v' ? 'ACTION' : (isSub ? 'SUBSCRIPTION' : 'PURCHASE');
+                const phase = this.classifyTouchpoint(r, j.firstOrderTs);
+
+                if (!insertedDivider && (phase === 'first' || phase === 'post')) {
+                    html += `<div style="display:flex;align-items:center;min-width:40px;flex-shrink:0;">
+                        <div style="width:2px;height:100%;min-height:60px;background:linear-gradient(180deg, transparent, #f59e0b, transparent);margin:0 auto;"></div>
+                    </div>`;
+                    insertedDivider = true;
+                }
+
+                const purchaseBadge = (r.t === 'o' && phase === 'first')
+                    ? '<span class="first-purchase-badge">★ 1st</span>'
+                    : '';
 
                 let cardBody = '';
                 if(r.t === 'c') {
@@ -1128,9 +1203,12 @@ class Dashboard {
                     contextChips += '</div>';
                 }
 
+                const subCls = isSub ? ' subscription' : '';
+                const phaseClass = phase === 'first' ? ' first-purchase' : phase === 'pre' ? ' pre-purchase' : '';
+                const subActCls = this.isSubscriptionAction(r) ? ' sub-action' : '';
                 const onclick = `event.stopPropagation();D.showTouchpoint('${j.fp}',${tpIndex})`;
-                html += `<div class="route-cell ${type}" onclick="${onclick}">
-                    <div class="route-cell-type ${type}">${typeLabel}</div>
+                html += `<div class="route-cell ${type}${subCls}${phaseClass}${subActCls}" onclick="${onclick}">
+                    <div class="route-cell-type ${type}${subCls}">${typeLabel}${purchaseBadge}</div>
                     ${cardBody}
                     ${contextChips}
                     <div class="route-cell-date">${this.fmtDate(r.dt)}</div>
@@ -1175,11 +1253,31 @@ class Dashboard {
         const tr = (s, n) => { if (!s) return ''; return s.length > n ? s.substring(0, n) + '…' : s; };
         const kv = (label, val) => val ? `<div class="route-cell-kv"><span class="kv-label">${label}</span> ${val}</div>` : '';
 
+        const visible = touchpoints.slice(0, 20);
+        const alreadyHadDivider = visible.some(r => {
+            const ph = this.classifyTouchpoint(r, journey.firstOrderTs);
+            return ph === 'first' || ph === 'post';
+        });
+        let insertedDivider = alreadyHadDivider;
+
         let newHtml = '';
         hidden.forEach((r, i) => {
             const tpIndex = 20 + i;
+            const isSub = this.isSubscription(r);
             const type = r.t === 'c' ? 'click' : r.t === 'v' ? 'conv' : 'order';
-            const typeLabel = r.t === 'c' ? 'CLICK' : r.t === 'v' ? 'ACTION' : 'PURCHASE';
+            const typeLabel = r.t === 'c' ? 'CLICK' : r.t === 'v' ? 'ACTION' : (isSub ? 'SUBSCRIPTION' : 'PURCHASE');
+            const phase = this.classifyTouchpoint(r, journey.firstOrderTs);
+
+            if (!insertedDivider && (phase === 'first' || phase === 'post')) {
+                newHtml += `<div style="display:flex;align-items:center;min-width:40px;flex-shrink:0;">
+                    <div style="width:2px;height:100%;min-height:60px;background:linear-gradient(180deg, transparent, #f59e0b, transparent);margin:0 auto;"></div>
+                </div>`;
+                insertedDivider = true;
+            }
+
+            const purchaseBadge = (r.t === 'o' && phase === 'first')
+                ? '<span class="first-purchase-badge">★ 1st</span>'
+                : '';
 
             let cardBody = '';
             if (r.t === 'c') {
@@ -1220,9 +1318,12 @@ class Dashboard {
                 contextChips += '</div>';
             }
 
+            const subCls = isSub ? ' subscription' : '';
+            const phaseClass = phase === 'first' ? ' first-purchase' : phase === 'pre' ? ' pre-purchase' : '';
+            const subActCls = this.isSubscriptionAction(r) ? ' sub-action' : '';
             const onclick = `event.stopPropagation();D.showTouchpoint('${fp}',${tpIndex})`;
-            newHtml += `<div class="route-cell ${type}" onclick="${onclick}">
-                <div class="route-cell-type ${type}">${typeLabel}</div>
+            newHtml += `<div class="route-cell ${type}${subCls}${phaseClass}${subActCls}" onclick="${onclick}">
+                <div class="route-cell-type ${type}${subCls}">${typeLabel}${purchaseBadge}</div>
                 ${cardBody}
                 ${contextChips}
                 <div class="route-cell-date">${this.fmtDate(r.dt)}</div>
@@ -1263,7 +1364,7 @@ class Dashboard {
             html += `<div style="font-size:12px; margin-bottom:4px;">Customer: <a class="xlink" onclick="${custClick}">${journey.custName||journey.custEmail}</a></div>`;
         }
         html += `<div style="font-size:12px; color:var(--text-dim); margin-bottom:12px;">${journey.count} touchpoints &middot; ${this.fmtDate(journey.firstDate)} → ${this.fmtDate(journey.lastDate)}${journey.revenue ? ' &middot; Revenue: <strong>$'+journey.revenue.toFixed(2)+'</strong>' : ''}</div>`;
-        html += this.renderTouchpointTable(fp, touchpoints);
+        html += this.renderTouchpointTable(fp, touchpoints, journey.firstOrderTs);
         this._openDetailContainer(html);
         makePanelResizable();
     }
@@ -1277,9 +1378,10 @@ class Dashboard {
         if(!r) return;
         this._trackPanelView('showTouchpoint', [fp, index]);
 
+        const isSub = this.isSubscription(r);
         const type = r.t === 'c' ? 'click' : r.t === 'v' ? 'conv' : 'order';
-        const typeBadgeClass = type === 'click' ? 'badge-blue' : type === 'conv' ? 'badge-orange' : 'badge-green';
-        const typeLabel = type === 'click' ? 'CLICK' : type === 'conv' ? 'ACTION' : 'PURCHASE';
+        const typeBadgeClass = type === 'click' ? 'badge-blue' : type === 'conv' ? 'badge-orange' : (isSub ? 'badge-subscription' : 'badge-green');
+        const typeLabel = type === 'click' ? 'CLICK' : type === 'conv' ? 'ACTION' : (isSub ? 'SUBSCRIPTION' : 'PURCHASE');
 
         const isNonEmpty = (v) => {
             if(v === undefined || v === null) return false;
@@ -1468,10 +1570,12 @@ class Dashboard {
         let html = '';
         sorted.forEach((o, i) => {
             const stBadge = o.st === 'FULFILLED' ? 'badge-green' : o.st === 'PENDING' ? 'badge-orange' : 'badge-grey';
+            const isSub = this.isSubscription(o);
+            const subTag = isSub ? ' <span class="badge badge-subscription">Subscription</span>' : '';
             const oidLink = `<a class="xlink" onclick="event.stopPropagation();D.navigateToOrder('${o.oid}')">#${o.oid}</a>`;
-            html += `<tr style="cursor:pointer;" onclick="D.showOrder('${o.oid}')">
+            html += `<tr class="${isSub ? 'subscription-row' : ''}" style="cursor:pointer;" onclick="D.showOrder('${o.oid}')">
                 <td>${i + 1}</td>
-                <td>${oidLink}</td>
+                <td>${oidLink}${subTag}</td>
                 <td style="white-space:nowrap;">${this.fmtDate(o.dt)}</td>
                 <td><strong>$${(o.pr || 0).toFixed(2)}</strong></td>
                 <td><span class="badge ${stBadge}">${o.st || 'N/A'}</span></td>
@@ -1488,7 +1592,7 @@ class Dashboard {
     }
 
     // Renders <tbody> rows for the customer touchpoints table (used by showCustomer + date sort toggle)
-    _renderCustomerTouchpointsBody(allTouchpoints, sortDir) {
+    _renderCustomerTouchpointsBody(allTouchpoints, sortDir, firstOrderTs) {
         const sorted = [...allTouchpoints].sort((a, b) => {
             const da = this.parseDate(a.dt);
             const db = this.parseDate(b.dt);
@@ -1505,9 +1609,13 @@ class Dashboard {
         let html = '';
         sorted.forEach((r, i) => {
             const type = r.t === 'c' ? 'click' : r.t === 'v' ? 'conv' : 'order';
+            const phase = this.classifyTouchpoint(r, firstOrderTs);
+            const phaseRowCls = phase === 'first' ? ' first-purchase-row' : phase === 'pre' ? ' pre-purchase-row' : '';
+            const purchaseExtra = (r.t === 'o' && phase === 'first') ? ' <span class="first-purchase-badge">★ 1st</span>' : '';
+
             const typeBadge = r.t === 'c' ? '<span class="badge badge-blue">CLICK</span>'
                 : r.t === 'v' ? '<span class="badge badge-orange">ACTION</span>'
-                : '<span class="badge badge-green">PURCHASE</span>';
+                : (this.isSubscription(r) ? '<span class="badge badge-subscription">SUBSCRIPTION</span>' : '<span class="badge badge-green">PURCHASE</span>');
             const ip = r.click_ip || r.conversion_ip || r.order_ip || r.ip || '';
             const payout = r.t === 'v' && r.pay != null && r.pay !== '' ? `$${Number(r.pay).toFixed(2)}` : '';
             const value = r.t === 'o' && r.pr != null && r.pr !== '' ? `$${Number(r.pr).toFixed(2)}` : '';
@@ -1517,8 +1625,9 @@ class Dashboard {
             const adGroup = r.adg || r.s1 || '';
             const oidLink = r.oid ? `<a class="xlink" onclick="event.stopPropagation();D.navigateToOrder('${r.oid}')">#${r.oid}</a>` : '';
             const fpLink = r._fp ? `<a class="xlink" onclick="event.stopPropagation();D.showJourneyPathsTable('${r._fp}')" style="font-family:monospace;font-size:11px;">${r._fp}</a>` : '';
-            html += `<tr class="${type}" style="cursor:pointer;" onclick="D.showTouchpoint('${r._fp}',${r._fpIdx})">
-                <td>${i + 1}</td><td>${typeBadge}</td><td>${r.vt || ''}</td><td style="white-space:nowrap;">${this.fmtDate(r.dt)}</td>
+            const subActRowCls = this.isSubscriptionAction(r) ? ' sub-action-row' : '';
+            html += `<tr class="${type}${this.isSubscription(r) ? ' subscription-row' : ''}${phaseRowCls}${subActRowCls}" style="cursor:pointer;" onclick="D.showTouchpoint('${r._fp}',${r._fpIdx})">
+                <td>${i + 1}</td><td>${typeBadge}${purchaseExtra}</td><td>${r.vt || ''}</td><td style="white-space:nowrap;">${this.fmtDate(r.dt)}</td>
                 <td>${fpLink}</td>
                 <td>${source}</td><td>${campaign}</td><td>${adGroup}</td>
                 <td>${r.s4 || ''}</td>
@@ -1556,7 +1665,7 @@ class Dashboard {
         html += `<div style="overflow-x:auto;">
             <table class="tp-table">
                 <thead><tr>
-                    <th>#</th><th>Fingerprint</th><th>Source</th><th>Clicks</th><th>Actions</th>
+                    <th>#</th><th>Fingerprint</th><th>Clicks</th><th>Actions</th>
                     <th>Orders</th><th style="text-align:right;">Revenue</th><th>First Seen</th><th>Last Seen</th><th>Touchpoints</th>
                 </tr></thead><tbody>`;
         fps.forEach((fp, i) => {
@@ -1566,14 +1675,14 @@ class Dashboard {
                 const rev = j.revenue ? `$${j.revenue.toFixed(2)}` : '$0.00';
                 const fmtD = (d) => { if (!d) return '—'; const dt = this.parseDate(d); if (!dt) return String(d); return dt.toLocaleDateString(undefined, { month:'short', day:'2-digit', year:'numeric' }); };
                 html += `<tr>
-                    <td>${i + 1}</td><td>${fpLink}</td><td>${j.src || '—'}</td>
+                    <td>${i + 1}</td><td>${fpLink}</td>
                     <td>${j.clicks.length}</td><td>${j.convs.length}</td><td>${j.orders.length}</td>
                     <td style="text-align:right;">${rev}</td>
                     <td style="white-space:nowrap;">${fmtD(j.firstDate)}</td><td style="white-space:nowrap;">${fmtD(j.lastDate)}</td>
                     <td>${j.count}</td>
                 </tr>`;
             } else {
-                html += `<tr><td>${i + 1}</td><td>${fpLink}</td><td>—</td><td>—</td><td>—</td><td>—</td><td style="text-align:right;">—</td><td>—</td><td>—</td><td>—</td></tr>`;
+                html += `<tr><td>${i + 1}</td><td>${fpLink}</td><td>—</td><td>—</td><td>—</td><td style="text-align:right;">—</td><td>—</td><td>—</td><td>—</td></tr>`;
             }
         });
         html += `</tbody></table></div>`;
@@ -1612,7 +1721,7 @@ class Dashboard {
                     </tr>
                 </thead>
                 <tbody>`;
-        html += this._renderCustomerTouchpointsBody(allTp, 'asc');
+        html += this._renderCustomerTouchpointsBody(allTp, 'asc', cust.firstOrderTs);
         html += '</tbody></table></div>';
 
         this._openDetailContainer(html);
@@ -1640,7 +1749,7 @@ class Dashboard {
                 tpSortDir = tpSortDir === 'asc' ? 'desc' : 'asc';
                 tpDateTh.textContent = tpSortDir === 'asc' ? 'Date ↑' : 'Date ↓';
                 tpDateTh.className = tpSortDir === 'asc' ? 'sort-asc' : 'sort-desc';
-                tpTbody.innerHTML = this._renderCustomerTouchpointsBody(allTp, tpSortDir);
+                tpTbody.innerHTML = this._renderCustomerTouchpointsBody(allTp, tpSortDir, cust.firstOrderTs);
             });
         }
     }
@@ -1721,6 +1830,13 @@ class Dashboard {
             html += '<button class="btn-remove-filter" onclick="D.removeTabFilter(' + i + ')" title="Remove filter">×</button>';
             html += '</div>';
         });
+
+        if (tab === 'orders') {
+            html += `<label style="display:inline-flex;align-items:center;gap:4px;margin-left:12px;font-size:13px;cursor:pointer;">
+                <input type="checkbox" onchange="D.toggleSubscriptions()" id="hide-subs-toggle"${this._hideSubscriptions ? ' checked' : ''}>
+                Hide subscriptions
+            </label>`;
+        }
 
         container.innerHTML = html;
     }
@@ -2017,7 +2133,11 @@ class Dashboard {
     }
 
     // Compact touchpoint table shared by order detail and journey path panels
-    renderTouchpointTable(fp, touchpoints) {
+    renderTouchpointTable(fp, touchpoints, firstOrderTs) {
+        if (firstOrderTs === undefined) {
+            const journey = this.journeys.find(j => j.fp === fp);
+            firstOrderTs = journey ? journey.firstOrderTs : null;
+        }
         let html = `<div style="overflow-x:auto;">
             <table class="tp-table">
                 <thead><tr>
@@ -2029,9 +2149,13 @@ class Dashboard {
 
         touchpoints.forEach((r, i) => {
             const type = r.t === 'c' ? 'click' : r.t === 'v' ? 'conv' : 'order';
+            const phase = this.classifyTouchpoint(r, firstOrderTs);
+            const phaseRowCls = phase === 'first' ? ' first-purchase-row' : phase === 'pre' ? ' pre-purchase-row' : '';
+            const purchaseExtra = (r.t === 'o' && phase === 'first') ? ' <span class="first-purchase-badge">★ 1st</span>' : '';
+
             const typeBadge = r.t === 'c' ? '<span class="badge badge-blue">CLICK</span>'
                 : r.t === 'v' ? '<span class="badge badge-orange">ACTION</span>'
-                : '<span class="badge badge-green">PURCHASE</span>';
+                : (this.isSubscription(r) ? '<span class="badge badge-subscription">SUBSCRIPTION</span>' : '<span class="badge badge-green">PURCHASE</span>');
             const ip = r.click_ip || r.conversion_ip || r.order_ip || r.ip || '';
             const payout = r.t === 'v' && r.pay != null && r.pay !== '' ? `$${Number(r.pay).toFixed(2)}` : '';
             const value = r.t === 'o' && r.pr != null && r.pr !== '' ? `$${Number(r.pr).toFixed(2)}` : '';
@@ -2042,8 +2166,9 @@ class Dashboard {
             const oidLink = r.oid ? `<a class="xlink" onclick="event.stopPropagation();D.navigateToOrder('${r.oid}')">#${r.oid}</a>` : '';
             const custLink = r.nm ? (r.cid ? `<a class="xlink" onclick="event.stopPropagation();D.navigateToCustomer('${r.cid}')">${r.nm}</a>` : r.nm) : '';
 
-            html += `<tr class="${type}" style="cursor:pointer;" onclick="D.showTouchpoint('${fp}',${i})">
-                <td>${i + 1}</td><td>${typeBadge}</td><td>${r.vt || ''}</td><td style="white-space:nowrap;">${this.fmtDate(r.dt)}</td>
+            const subActRowCls = this.isSubscriptionAction(r) ? ' sub-action-row' : '';
+            html += `<tr class="${type}${this.isSubscription(r) ? ' subscription-row' : ''}${phaseRowCls}${subActRowCls}" style="cursor:pointer;" onclick="D.showTouchpoint('${fp}',${i})">
+                <td>${i + 1}</td><td>${typeBadge}${purchaseExtra}</td><td>${r.vt || ''}</td><td style="white-space:nowrap;">${this.fmtDate(r.dt)}</td>
                 <td>${source}</td><td>${campaign}</td><td>${adGroup}</td>
                 <td>${r.s4 || ''}</td><td>${r.s5 || ''}</td><td>${r.s6 || ''}</td>
                 <td>${r.dev || ''}</td><td>${r.br || ''}</td><td>${r.os || ''}</td>
@@ -2171,8 +2296,10 @@ class Dashboard {
         const container = document.getElementById('detail-container');
         if (container) {
             container.classList.remove('open');
-            container.innerHTML = '';
-            container.style.display = 'none';
+            container.addEventListener('transitionend', function handler() {
+                if (!container.classList.contains('open')) container.innerHTML = '';
+                container.removeEventListener('transitionend', handler);
+            });
         }
         this._showActiveTabBody();
         const tab = this._currentTab || 'route';
