@@ -39,10 +39,10 @@
 
     <!-- TABS -->
     <div class="tabs">
-        <div class="tab active" onclick="D.switchTab('route')">Journey Paths<span class="tab-count" id="tc-route"></span></div>
+        <div class="tab" onclick="D.switchTab('route')">Journey Paths<span class="tab-count" id="tc-route"></span></div>
         <div class="tab" onclick="D.switchTab('orders')">Orders<span class="tab-count" id="tc-orders"></span></div>
         <div class="tab" onclick="D.switchTab('customers')">Customers<span class="tab-count" id="tc-customers"></span></div>
-        <div class="tab" onclick="D.switchTab('attribution')">Attribution</div>
+        <div class="tab active" onclick="D.switchTab('attribution')">Path Stops</div>
     </div>
 
     <!-- PER-TAB FILTERS (Level 2) -->
@@ -55,7 +55,7 @@
     <div id="detail-container" class="detail-container"></div>
 
     <!-- JOURNEY PATHS TAB -->
-    <div class="tab-body active" id="tab-route">
+    <div class="tab-body" id="tab-route">
         <div class="card">
             <div class="card-hdr"><h3>Journey Paths</h3></div>
             <div id="route-table" style="overflow-x:auto;"></div>
@@ -82,25 +82,8 @@
         </div>
     </div>
 
-    <!-- ATTRIBUTION TAB -->
-    <div class="tab-body" id="tab-attribution">
-        <div class="card" style="padding:20px;">
-            <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;flex-wrap:wrap">
-                <h3 style="margin:0;font-size:16px;font-weight:700">Attribution Analysis</h3>
-                <div class="attr-view-toggle">
-                    <button class="btn-attr active" id="btn-attr-source" onclick="D.setAttrView('source')">By Source</button>
-                    <button class="btn-attr" id="btn-attr-campaign" onclick="D.setAttrView('campaign')">By Campaign</button>
-                </div>
-                <span style="font-size:12px;color:var(--text-dim);margin-left:auto" id="attr-summary"></span>
-            </div>
-            <div style="overflow-x:auto;" id="attr-table-wrap">
-                <table class="tbl" id="attr-table">
-                    <thead id="attr-thead"></thead>
-                    <tbody id="attr-tbody"></tbody>
-                </table>
-            </div>
-        </div>
-    </div>
+    <!-- PATH STOPS TAB -->
+    <div class="tab-body active" id="tab-attribution"></div>
 </div>
 
 

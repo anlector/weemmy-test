@@ -10,6 +10,29 @@ const FUNNEL_STAGES = [
 ];
 
 // Per-tab filter field definitions (key matches record/journey property)
+const STOP_DIMENSIONS = [
+    { key: 'src',  label: 'Source',      field: 'src' },
+    { key: 'cmp',  label: 'Campaign',    field: 'cmp' },
+    { key: 'adg',  label: 'Ad Group',    field: r => r.adg || r.s1 || '' },
+    { key: 's4',   label: 'Creative',    field: 's4' },
+    { key: 'plc',  label: 'Placement',   field: r => r.plc || r.s2 || '' },
+    { key: 'co',   label: 'Country',     field: 'co' },
+    { key: 'ci',   label: 'City',        field: 'ci' },
+    { key: 'dev',  label: 'Device',      field: 'dev' },
+    { key: 'br',   label: 'Browser',     field: 'br' },
+    { key: 'os',   label: 'OS',          field: 'os' },
+    { key: 'vt',   label: 'Conv. Type',  field: 'vt' },
+    { key: 's1',   label: 'Sub1',        field: 's1' },
+    { key: 's2',   label: 'Sub2',        field: 's2' },
+    { key: 's3',   label: 'Sub3',        field: 's3' },
+    { key: 's5',   label: 'Sub5',        field: 's5' },
+    { key: 's6',   label: 'Sub6',        field: 's6' },
+];
+function getStopValue(record, dim) {
+    if (typeof dim.field === 'function') return dim.field(record) || '';
+    return record[dim.field] || '';
+}
+
 const TAB_FILTER_FIELDS = {
     route: [
         { key: 'src', label: 'Source', type: 'select', level: 'journey' },
@@ -509,15 +532,19 @@ class Dashboard {
         this.clicks = data.filter(r=>r.t==='c');
         this.convs = data.filter(r=>r.t==='v');
         this.orders = data.filter(r=>r.t==='o');
-        this.activeTab = 'route';
+        this.activeTab = 'attribution';
         this.pages = {orders:0, customers:0, route:0};
         this.pageSize = 20;
         this.sortState = {};
-        this._attrView = 'source';
-        this._attrSortCol = 'ft';
-        this._attrSortAsc = false;
+        this._stops = {
+            stop1: { dimKey: 'src' },
+            stop2: { dimKey: null, value: null },
+            stop3: { dimKey: null, value: null },
+        };
+        this._stopsSort = { col: 'count', asc: false };
+        this._expandedStopRows = new Set();
         this._tabFilters = {};
-        this._currentTab = 'route';
+        this._currentTab = 'attribution';
         this.filteredJourneys = null;
         this.filteredOrders = null;
         this.filteredCustomers = null;
@@ -2006,29 +2033,10 @@ class Dashboard {
     }
 
     // Switches attribution view between source and campaign
-    setAttrView(view) {
-        this._attrView = view;
-        document.getElementById('btn-attr-source').classList.toggle('active', view === 'source');
-        document.getElementById('btn-attr-campaign').classList.toggle('active', view === 'campaign');
-        this.renderAttribution();
-    }
-
-    // Sorts the attribution table by the given column
-    sortAttrTable(col) {
-        this._attrSortAsc = this._attrSortCol === col ? !this._attrSortAsc : false;
-        this._attrSortCol = col;
-        this.renderAttribution();
-    }
-
-    // First-touch / last-touch / linear attribution analysis table
-    renderAttribution() {
-        const thead = document.getElementById('attr-thead');
-        const tbody = document.getElementById('attr-tbody');
-        const summary = document.getElementById('attr-summary');
-        if (!thead || !tbody) return;
-
-        const field = this._attrView === 'source' ? 'src' : 'cmp';
-        const label = this._attrView === 'source' ? 'Source' : 'Campaign';
+    _computeStopsData() {
+        const stop1Dim = STOP_DIMENSIONS.find(d => d.key === this._stops.stop1.dimKey) || STOP_DIMENSIONS[0];
+        const stop2Dim = this._stops.stop2.dimKey ? STOP_DIMENSIONS.find(d => d.key === this._stops.stop2.dimKey) : null;
+        const stop3Dim = this._stops.stop3.dimKey ? STOP_DIMENSIONS.find(d => d.key === this._stops.stop3.dimKey) : null;
 
         const fpMap = {};
         this.filtered.forEach(r => {
@@ -2037,90 +2045,238 @@ class Dashboard {
             fpMap[r.fp].push(r);
         });
 
-        const attrData = {};
-        let totalConverting = 0;
-
-        Object.values(fpMap).forEach(records => {
-            const orders = records.filter(r => r.t === 'o');
-            if (!orders.length) return;
-            const clicks = records.filter(r => r.t === 'c').sort((a, b) => new Date(a.dt) - new Date(b.dt));
-            if (!clicks.length) return;
-            totalConverting++;
-
-            const totalRev = orders.reduce((s, o) => s + (parseFloat(o.pr) || 0), 0);
-            const firstKey = clicks[0][field] || 'Unknown';
-            const lastKey = clicks[clicks.length - 1][field] || 'Unknown';
-
-            const uniqueKeys = [...new Set(clicks.map(c => c[field] || 'Unknown'))];
-            const linearShare = 1 / uniqueKeys.length;
-            const linearRevShare = totalRev / uniqueKeys.length;
-
-            [firstKey, lastKey, ...uniqueKeys].forEach(k => {
-                if (!attrData[k]) attrData[k] = { ft: 0, lt: 0, linear: 0, revFt: 0, revLt: 0, revLn: 0 };
+        const result = {};
+        Object.entries(fpMap).forEach(([fp, records]) => {
+            const sorted = [...records].sort((a, b) => {
+                const da = this.parseDate(a.dt), db = this.parseDate(b.dt);
+                return (da || 0) - (db || 0);
             });
+            const firstClick = sorted.find(r => r.t === 'c');
+            if (!firstClick) return;
+            const stop1Val = getStopValue(firstClick, stop1Dim);
+            if (!stop1Val) return;
+            if (!result[stop1Val]) result[stop1Val] = { count: 0, stop2Count: 0, stop3Count: 0, fps: [] };
+            result[stop1Val].count++;
+            result[stop1Val].fps.push(fp);
 
-            attrData[firstKey].ft += 1;
-            attrData[firstKey].revFt += totalRev;
-            attrData[lastKey].lt += 1;
-            attrData[lastKey].revLt += totalRev;
-            uniqueKeys.forEach(k => {
-                attrData[k].linear += linearShare;
-                attrData[k].revLn += linearRevShare;
-            });
+            if (stop2Dim && this._stops.stop2.value) {
+                const firstClickIdx = sorted.indexOf(firstClick);
+                const stop2Match = sorted.find((r, i) => i > firstClickIdx && getStopValue(r, stop2Dim) === this._stops.stop2.value);
+                if (stop2Match) {
+                    result[stop1Val].stop2Count++;
+                    if (stop3Dim && this._stops.stop3.value) {
+                        const stop2Idx = sorted.indexOf(stop2Match);
+                        const stop3Match = sorted.find((r, i) => i > stop2Idx && getStopValue(r, stop3Dim) === this._stops.stop3.value);
+                        if (stop3Match) result[stop1Val].stop3Count++;
+                    }
+                }
+            }
         });
+        return result;
+    }
 
-        const sortCol = this._attrSortCol || 'ft';
-        const sortAsc = this._attrSortAsc || false;
-        const sorted = Object.entries(attrData).sort((a, b) => {
+    _getStopDimValues(dimKey) {
+        const dim = STOP_DIMENSIONS.find(d => d.key === dimKey);
+        if (!dim) return [];
+        const vals = new Set();
+        this.filtered.forEach(r => {
+            const v = getStopValue(r, dim);
+            if (v) vals.add(v);
+        });
+        return [...vals].sort();
+    }
+
+    setStopDim(stopNum, dimKey) {
+        const stop = this._stops['stop' + stopNum];
+        stop.dimKey = dimKey || null;
+        stop.value = null;
+        if (stopNum === 2 && !dimKey) {
+            this._stops.stop3.dimKey = null;
+            this._stops.stop3.value = null;
+        }
+        this._expandedStopRows.clear();
+        this.renderAttribution();
+    }
+
+    setStopValue(stopNum, value) {
+        this._stops['stop' + stopNum].value = value || null;
+        this._expandedStopRows.clear();
+        this.renderAttribution();
+    }
+
+    sortStops(col) {
+        this._stopsSort.asc = this._stopsSort.col === col ? !this._stopsSort.asc : false;
+        this._stopsSort.col = col;
+        this.renderAttribution();
+    }
+
+    toggleStopRow(name) {
+        if (this._expandedStopRows.has(name)) this._expandedStopRows.delete(name);
+        else this._expandedStopRows.add(name);
+        this.renderAttribution();
+    }
+
+    _renderStopFingerprints(fps) {
+        if (!fps || !fps.length) return '<div style="padding:8px;color:var(--text-dim);">No journeys</div>';
+        let html = '<div class="stops-fps-container"><table class="stops-fps-table"><thead><tr>';
+        html += '<th>#</th><th>Fingerprint</th><th>Customer</th><th>Touchpoints</th><th>Revenue</th><th>First Seen</th><th>Last Seen</th>';
+        html += '</tr></thead><tbody>';
+        fps.forEach((fp, i) => {
+            const journey = this.journeys.find(j => j.fp === fp);
+            if (!journey) return;
+            const custLabel = journey.custName || journey.custEmail || '';
+            const custLink = journey.custId
+                ? '<a class="xlink" onclick="event.stopPropagation();D.navigateToCustomer(\'' + journey.custId + '\')">' + custLabel + '</a>'
+                : custLabel;
+            const fpShort = fp.substring(0, 14) + '…';
+            const rev = journey.revenue ? '$' + journey.revenue.toFixed(2) : '';
+            html += '<tr onclick="event.stopPropagation();D.showJourneyPathsTable(\'' + fp + '\')">';
+            html += '<td>' + (i + 1) + '</td>';
+            html += '<td><a class="xlink" style="font-family:monospace;font-size:12px;">' + fpShort + '</a></td>';
+            html += '<td>' + custLink + '</td>';
+            html += '<td>' + journey.count + '</td>';
+            html += '<td>' + rev + '</td>';
+            html += '<td>' + (this.fmtDate(journey.firstDate) || '') + '</td>';
+            html += '<td>' + (this.fmtDate(journey.lastDate) || '') + '</td>';
+            html += '</tr>';
+        });
+        html += '</tbody></table></div>';
+        return html;
+    }
+
+    renderAttribution() {
+        const container = document.getElementById('tab-attribution');
+        if (!container) return;
+
+        const stop1Dim = STOP_DIMENSIONS.find(d => d.key === this._stops.stop1.dimKey) || STOP_DIMENSIONS[0];
+        const stop2Active = this._stops.stop2.dimKey && this._stops.stop2.value;
+        const stop3Active = this._stops.stop3.dimKey && this._stops.stop3.value;
+
+        const data = this._computeStopsData();
+        const sortCol = this._stopsSort.col;
+        const sortAsc = this._stopsSort.asc;
+
+        let rows = Object.entries(data);
+        rows.sort((a, b) => {
             let va, vb;
-            if (sortCol === 'name') { va = a[0].toLowerCase(); vb = b[0].toLowerCase(); return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va); }
+            if (sortCol === 'name') {
+                va = a[0].toLowerCase(); vb = b[0].toLowerCase();
+                return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+            }
             va = a[1][sortCol] || 0; vb = b[1][sortCol] || 0;
             return sortAsc ? va - vb : vb - va;
         });
-        const maxFt = sorted.length ? Math.max(...sorted.map(([, v]) => v.ft)) : 1;
-        const maxLt = sorted.length ? Math.max(...sorted.map(([, v]) => v.lt)) : 1;
-        const maxLn = sorted.length ? Math.max(...sorted.map(([, v]) => v.linear)) : 1;
 
-        const arrow = col => {
-            if (sortCol !== col) return '';
-            return sortAsc ? ' ↑' : ' ↓';
-        };
-        thead.innerHTML = '<tr>' +
-            '<th onclick="D.sortAttrTable(\'name\')">' + label + arrow('name') + '</th>' +
-            '<th onclick="D.sortAttrTable(\'ft\')">First Touch' + arrow('ft') + '</th>' +
-            '<th onclick="D.sortAttrTable(\'lt\')">Last Touch' + arrow('lt') + '</th>' +
-            '<th onclick="D.sortAttrTable(\'linear\')">Linear' + arrow('linear') + '</th>' +
-            '<th onclick="D.sortAttrTable(\'revFt\')">Rev (FT)' + arrow('revFt') + '</th>' +
-            '<th onclick="D.sortAttrTable(\'revLt\')">Rev (LT)' + arrow('revLt') + '</th>' +
-            '<th onclick="D.sortAttrTable(\'revLn\')">Rev (Linear)' + arrow('revLn') + '</th>' +
-            '</tr>';
+        const totalJourneys = rows.reduce((s, [, d]) => s + d.count, 0);
 
-        const fmt = n => n >= 1000 ? (n / 1000).toFixed(1) + 'k' : n.toFixed(0);
-        const fmtRev = n => '$' + (n >= 1000 ? (n / 1000).toFixed(1) + 'k' : n.toFixed(0));
-        const barHtml = (val, max, cls) => {
-            const pxWidth = max > 0 ? Math.round((val / max) * 80) : 0;
-            return '<div class="attr-bar ' + cls + '" style="width:' + Math.max(pxWidth, 2) + 'px"></div>';
-        };
+        let html = '<div class="stops-header">';
+        html += '<h3 style="font-size:16px;font-weight:700;margin:0;">Path Stops</h3>';
+        html += '<span style="font-size:12px;color:var(--text-dim);margin-left:auto;">' + totalJourneys + ' journeys across ' + rows.length + ' ' + stop1Dim.label.toLowerCase() + 's</span>';
+        html += '</div>';
 
-        let html = '';
-        sorted.forEach(([name, d]) => {
-            html += '<tr>' +
-                '<td class="attr-name-cell" title="' + name + '">' + name + '</td>' +
-                '<td>' + barHtml(d.ft, maxFt, 'attr-bar-ft') + ' ' + fmt(d.ft) + '</td>' +
-                '<td>' + barHtml(d.lt, maxLt, 'attr-bar-lt') + ' ' + fmt(d.lt) + '</td>' +
-                '<td>' + barHtml(d.linear, maxLn, 'attr-bar-ln') + ' ' + d.linear.toFixed(1) + '</td>' +
-                '<td>' + fmtRev(d.revFt) + '</td>' +
-                '<td>' + fmtRev(d.revLt) + '</td>' +
-                '<td>' + fmtRev(d.revLn) + '</td>' +
-                '</tr>';
+        html += '<div class="stops-config">';
+
+        html += '<div class="stop-config stop-config-1">';
+        html += '<div class="stop-label">Stop 1</div>';
+        html += '<select class="stop-dim-select" onchange="D.setStopDim(1, this.value)">';
+        STOP_DIMENSIONS.forEach(d => {
+            html += '<option value="' + d.key + '"' + (d.key === this._stops.stop1.dimKey ? ' selected' : '') + '>' + d.label + '</option>';
         });
-        tbody.innerHTML = html;
+        html += '</select></div>';
 
-        if (summary) {
-            summary.textContent = totalConverting + ' converting journeys analyzed across ' + sorted.length + ' ' + label.toLowerCase() + 's';
+        html += '<div class="stop-config stop-config-2">';
+        html += '<div class="stop-label">Stop 2 <span class="stop-optional">(optional)</span></div>';
+        html += '<select class="stop-dim-select" onchange="D.setStopDim(2, this.value)">';
+        html += '<option value="">— Not set —</option>';
+        STOP_DIMENSIONS.forEach(d => {
+            html += '<option value="' + d.key + '"' + (d.key === this._stops.stop2.dimKey ? ' selected' : '') + '>' + d.label + '</option>';
+        });
+        html += '</select>';
+        if (this._stops.stop2.dimKey) {
+            const vals = this._getStopDimValues(this._stops.stop2.dimKey);
+            html += '<select class="stop-val-select" onchange="D.setStopValue(2, this.value)">';
+            html += '<option value="">— Select value —</option>';
+            vals.forEach(v => {
+                const esc = String(v).replace(/"/g, '&quot;');
+                html += '<option value="' + esc + '"' + (v === this._stops.stop2.value ? ' selected' : '') + '>' + v + '</option>';
+            });
+            html += '</select>';
         }
+        html += '</div>';
 
-        const table = document.getElementById('attr-table');
+        html += '<div class="stop-config stop-config-3">';
+        if (stop2Active) {
+            html += '<div class="stop-label">Stop 3 <span class="stop-optional">(optional)</span></div>';
+            html += '<select class="stop-dim-select" onchange="D.setStopDim(3, this.value)">';
+            html += '<option value="">— Not set —</option>';
+            STOP_DIMENSIONS.forEach(d => {
+                html += '<option value="' + d.key + '"' + (d.key === this._stops.stop3.dimKey ? ' selected' : '') + '>' + d.label + '</option>';
+            });
+            html += '</select>';
+            if (this._stops.stop3.dimKey) {
+                const vals = this._getStopDimValues(this._stops.stop3.dimKey);
+                html += '<select class="stop-val-select" onchange="D.setStopValue(3, this.value)">';
+                html += '<option value="">— Select value —</option>';
+                vals.forEach(v => {
+                    const esc = String(v).replace(/"/g, '&quot;');
+                    html += '<option value="' + esc + '"' + (v === this._stops.stop3.value ? ' selected' : '') + '>' + v + '</option>';
+                });
+                html += '</select>';
+            }
+        }
+        html += '</div></div>';
+
+        const arrow = col => this._stopsSort.col === col ? (this._stopsSort.asc ? ' ↑' : ' ↓') : '';
+        const maxCount = rows.length ? Math.max(...rows.map(([, d]) => d.count)) : 1;
+        const maxStop2 = rows.length ? Math.max(...rows.map(([, d]) => d.stop2Count), 1) : 1;
+        const maxStop3 = rows.length ? Math.max(...rows.map(([, d]) => d.stop3Count), 1) : 1;
+        const stop2Dim = this._stops.stop2.dimKey ? STOP_DIMENSIONS.find(d => d.key === this._stops.stop2.dimKey) : null;
+        const stop3Dim = this._stops.stop3.dimKey ? STOP_DIMENSIONS.find(d => d.key === this._stops.stop3.dimKey) : null;
+
+        html += '<div style="overflow-x:auto;">';
+        html += '<table class="tbl" id="stops-table"><thead><tr>';
+        html += '<th onclick="D.sortStops(\'name\')">' + stop1Dim.label + arrow('name') + '</th>';
+        html += '<th onclick="D.sortStops(\'count\')">Journeys' + arrow('count') + '</th>';
+        if (stop2Active) {
+            const s2Label = stop2Dim.label + ': ' + this._stops.stop2.value;
+            html += '<th onclick="D.sortStops(\'stop2Count\')" title="' + s2Label.replace(/"/g, '&quot;') + '">Stop 2' + arrow('stop2Count') + '</th>';
+        }
+        if (stop3Active) {
+            const s3Label = stop3Dim.label + ': ' + this._stops.stop3.value;
+            html += '<th onclick="D.sortStops(\'stop3Count\')" title="' + s3Label.replace(/"/g, '&quot;') + '">Stop 3' + arrow('stop3Count') + '</th>';
+        }
+        html += '</tr></thead><tbody>';
+
+        const barHtml = (val, max, cls) => {
+            const w = max > 0 ? Math.round((val / max) * 80) : 0;
+            return '<div class="stops-bar ' + cls + '" style="width:' + Math.max(w, 2) + 'px"></div>';
+        };
+
+        rows.forEach(([name, d]) => {
+            const isExpanded = this._expandedStopRows.has(name);
+            const expandIcon = isExpanded ? '▾' : '▸';
+            const rowClass = isExpanded ? 'stops-row-expanded' : '';
+            const escapedName = name.replace(/'/g, "\\'").replace(/\\/g, '\\\\');
+
+            html += '<tr class="stops-row ' + rowClass + '" onclick="D.toggleStopRow(\'' + escapedName + '\')">';
+            html += '<td class="stops-name-cell"><span class="stops-expand-icon">' + expandIcon + '</span> ' + name + '</td>';
+            html += '<td>' + barHtml(d.count, maxCount, 'stops-bar-1') + ' ' + d.count + '</td>';
+            if (stop2Active) html += '<td>' + barHtml(d.stop2Count, maxStop2, 'stops-bar-2') + ' ' + d.stop2Count + '</td>';
+            if (stop3Active) html += '<td>' + barHtml(d.stop3Count, maxStop3, 'stops-bar-3') + ' ' + d.stop3Count + '</td>';
+            html += '</tr>';
+
+            if (isExpanded) {
+                const colSpan = 2 + (stop2Active ? 1 : 0) + (stop3Active ? 1 : 0);
+                html += '<tr class="stops-expansion-row"><td colspan="' + colSpan + '">';
+                html += this._renderStopFingerprints(d.fps);
+                html += '</td></tr>';
+            }
+        });
+
+        html += '</tbody></table></div>';
+        container.innerHTML = html;
+
+        const table = document.getElementById('stops-table');
         if (table) {
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
@@ -2521,9 +2677,11 @@ window.D = {
     _renderCustomerTouchpointsBody: () => '',
     toggleFunnelPanel: () => {},
     renderFunnel: () => {},
-    setAttrView: () => {},
     renderAttribution: () => {},
-    sortAttrTable: () => {},
+    setStopDim: () => {},
+    setStopValue: () => {},
+    sortStops: () => {},
+    toggleStopRow: () => {},
 };
 
 // Main init: tries to load CSV from ?csvUrl= param (or default file), falls back to file upload
