@@ -18,7 +18,7 @@ const TAB_FILTER_FIELDS = {
         { key: 'cmp', label: 'Campaign', type: 'select', level: 'journey' },
         { key: 'co', label: 'State', type: 'select', level: 'record' },
         { key: 'hasOrder', label: 'Has Orders', type: 'bool', level: 'journey' },
-        { key: 'hasConv', label: 'Has Conversions', type: 'bool', level: 'journey' },
+        { key: 'hasConv', label: 'Has Actions', type: 'bool', level: 'journey' },
         { key: 'custName', label: 'Customer Name', type: 'text', level: 'journey' },
         { key: 'custEmail', label: 'Customer Email', type: 'text', level: 'journey' },
     ],
@@ -486,7 +486,7 @@ class Dashboard {
         { label:'Device',      keys:['dev','os','br','ua'] },
         { label:'Location',    keys:['co','ci','ip','isp','addr','zip'] },
         { label:'Customer',    keys:['nm','em','cid'] },
-        { label:'Conversion',  keys:['vt','pay'] },
+        { label:'Action',  keys:['vt','pay'] },
         { label:'Order',       keys:['oid','pr','st','cur','app'] },
         // Raw CSV column groups — populated dynamically via prefix matching
         { label:'Raw — Click',       prefix:'click_' },
@@ -814,7 +814,7 @@ class Dashboard {
             const custCell = r.cid
                 ? `<a class="xlink" onclick="event.stopPropagation();D.navigateToCustomer('${r.cid}')">${r.nm||''}</a>${r.em?'<br><small style="color:var(--text-dim)">'+r.em+'</small>':''}`
                 : `${r.nm||''}${r.em?'<br><small style="color:var(--text-dim)">'+r.em+'</small>':''}`;
-            const fpCell = r.fp ? `<a class="xlink" onclick="event.stopPropagation();D.navigateToFingerprint('${r.fp}')" style="font-size:12px;">${r.fp.substring(0,12)}...</a>` : '';
+            const fpCell = r.fp ? `<a class="xlink" onclick="event.stopPropagation();D.navigateToFingerprint('${r.fp}')" style="font-family:monospace;font-size:12px;">${r.fp}</a>` : '';
             html += `<tr onclick="D.showOrder('${r.oid}')">
                 <td>${r.oid||''}</td>
                 <td>${this.fmtDate(r.dt)}</td>
@@ -969,7 +969,7 @@ class Dashboard {
 
             visible.forEach((r, tpIndex) => {
                 const type = r.t === 'c' ? 'click' : r.t === 'v' ? 'conv' : 'order';
-                const typeLabel = r.t === 'c' ? 'CLICK' : r.t === 'v' ? 'CONVERSION' : 'ORDER';
+                const typeLabel = r.t === 'c' ? 'CLICK' : r.t === 'v' ? 'ACTION' : 'PURCHASE';
 
                 let cardBody = '';
                 if(r.t === 'c') {
@@ -1061,7 +1061,7 @@ class Dashboard {
         hidden.forEach((r, i) => {
             const tpIndex = 20 + i;
             const type = r.t === 'c' ? 'click' : r.t === 'v' ? 'conv' : 'order';
-            const typeLabel = r.t === 'c' ? 'CLICK' : r.t === 'v' ? 'CONVERSION' : 'ORDER';
+            const typeLabel = r.t === 'c' ? 'CLICK' : r.t === 'v' ? 'ACTION' : 'PURCHASE';
 
             let cardBody = '';
             if (r.t === 'c') {
@@ -1160,7 +1160,7 @@ class Dashboard {
 
         const type = r.t === 'c' ? 'click' : r.t === 'v' ? 'conv' : 'order';
         const typeBadgeClass = type === 'click' ? 'badge-blue' : type === 'conv' ? 'badge-orange' : 'badge-green';
-        const typeLabel = type === 'click' ? 'CLICK' : type === 'conv' ? 'CONVERSION' : 'ORDER';
+        const typeLabel = type === 'click' ? 'CLICK' : type === 'conv' ? 'ACTION' : 'PURCHASE';
 
         const isNonEmpty = (v) => {
             if(v === undefined || v === null) return false;
@@ -1389,8 +1389,8 @@ class Dashboard {
         sorted.forEach((r, i) => {
             const type = r.t === 'c' ? 'click' : r.t === 'v' ? 'conv' : 'order';
             const typeBadge = r.t === 'c' ? '<span class="badge badge-blue">CLICK</span>'
-                : r.t === 'v' ? '<span class="badge badge-orange">CONV</span>'
-                : '<span class="badge badge-green">ORDER</span>';
+                : r.t === 'v' ? '<span class="badge badge-orange">ACTION</span>'
+                : '<span class="badge badge-green">PURCHASE</span>';
             const ip = r.click_ip || r.conversion_ip || r.order_ip || r.ip || '';
             const payout = r.t === 'v' && r.pay != null && r.pay !== '' ? `$${Number(r.pay).toFixed(2)}` : '';
             const value = r.t === 'o' && r.pr != null && r.pr !== '' ? `$${Number(r.pr).toFixed(2)}` : '';
@@ -1399,7 +1399,7 @@ class Dashboard {
             const campaign = r.t === 'o' ? (r.rcmp || r.cmp || '') : (r.cmp || '');
             const adGroup = r.adg || r.s1 || '';
             const oidLink = r.oid ? `<a class="xlink" onclick="event.stopPropagation();D.navigateToOrder('${r.oid}')">#${r.oid}</a>` : '';
-            const fpLink = r._fp ? `<a class="xlink" onclick="event.stopPropagation();D.showJourneyPathsTable('${r._fp}')" style="font-size:11px;">${r._fp.substring(0, 10)}…</a>` : '';
+            const fpLink = r._fp ? `<a class="xlink" onclick="event.stopPropagation();D.showJourneyPathsTable('${r._fp}')" style="font-family:monospace;font-size:11px;">${r._fp}</a>` : '';
             html += `<tr class="${type}" style="cursor:pointer;" onclick="D.showTouchpoint('${r._fp}',${r._fpIdx})">
                 <td>${i + 1}</td><td>${typeBadge}</td><td>${r.vt || ''}</td><td style="white-space:nowrap;">${this.fmtDate(r.dt)}</td>
                 <td>${fpLink}</td>
@@ -1431,6 +1431,34 @@ class Dashboard {
         html += this.dlRow('First Seen',this.fmtDate(cust.firstSeen));
         html += this.dlRow('Last Seen',this.fmtDate(cust.lastSeen));
         html += '</dl></div>';
+
+        // Fingerprints table
+        const fps = cust.fps || [];
+        html += `<div class="detail-sub">Fingerprints (${fps.length})</div>`;
+        html += `<div style="overflow-x:auto;">
+            <table class="tp-table">
+                <thead><tr>
+                    <th>#</th><th>Fingerprint</th><th>Source</th><th>Clicks</th><th>Actions</th>
+                    <th>Orders</th><th style="text-align:right;">Revenue</th><th>First Seen</th><th>Last Seen</th><th>Touchpoints</th>
+                </tr></thead><tbody>`;
+        fps.forEach((fp, i) => {
+            const j = this.journeys.find(jj => jj.fp === fp);
+            const fpLink = `<a class="xlink" style="font-family:monospace;font-size:0.85em;color:#007892;cursor:pointer;" onclick="event.stopPropagation();D.navigateToFingerprint('${fp}')">${fp}</a>`;
+            if (j) {
+                const rev = j.revenue ? `$${j.revenue.toFixed(2)}` : '$0.00';
+                const fmtD = (d) => { if (!d) return '—'; const dt = this.parseDate(d); if (!dt) return String(d); return dt.toLocaleDateString(undefined, { month:'short', day:'2-digit', year:'numeric' }); };
+                html += `<tr>
+                    <td>${i + 1}</td><td>${fpLink}</td><td>${j.src || '—'}</td>
+                    <td>${j.clicks.length}</td><td>${j.convs.length}</td><td>${j.orders.length}</td>
+                    <td style="text-align:right;">${rev}</td>
+                    <td style="white-space:nowrap;">${fmtD(j.firstDate)}</td><td style="white-space:nowrap;">${fmtD(j.lastDate)}</td>
+                    <td>${j.count}</td>
+                </tr>`;
+            } else {
+                html += `<tr><td>${i + 1}</td><td>${fpLink}</td><td>—</td><td>—</td><td>—</td><td>—</td><td style="text-align:right;">—</td><td>—</td><td>—</td><td>—</td></tr>`;
+            }
+        });
+        html += `</tbody></table></div>`;
 
         // Orders table
         html += `<div class="detail-sub">Orders (${cust.orders.length})</div>`;
@@ -1885,8 +1913,8 @@ class Dashboard {
         touchpoints.forEach((r, i) => {
             const type = r.t === 'c' ? 'click' : r.t === 'v' ? 'conv' : 'order';
             const typeBadge = r.t === 'c' ? '<span class="badge badge-blue">CLICK</span>'
-                : r.t === 'v' ? '<span class="badge badge-orange">CONV</span>'
-                : '<span class="badge badge-green">ORDER</span>';
+                : r.t === 'v' ? '<span class="badge badge-orange">ACTION</span>'
+                : '<span class="badge badge-green">PURCHASE</span>';
             const ip = r.click_ip || r.conversion_ip || r.order_ip || r.ip || '';
             const payout = r.t === 'v' && r.pay != null && r.pay !== '' ? `$${Number(r.pay).toFixed(2)}` : '';
             const value = r.t === 'o' && r.pr != null && r.pr !== '' ? `$${Number(r.pr).toFixed(2)}` : '';
@@ -2099,6 +2127,15 @@ function addColumnHighlight(tableEl) {
     });
 }
 
+// Updates max-width on all tbody cells in a given column to match the header width
+function syncColumnMaxWidth(tableEl, colIndex, width) {
+    const rows = tableEl.querySelectorAll('tbody tr');
+    rows.forEach(row => {
+        const td = row.children[colIndex];
+        if (td) td.style.maxWidth = width + 'px';
+    });
+}
+
 // Adds drag handles to table column headers for manual resize (+ double-click to auto-fit)
 function makeResizable(tableEl) {
     if(!tableEl) return;
@@ -2118,6 +2155,7 @@ function makeResizable(tableEl) {
         handle.addEventListener('dblclick', e => {
             e.preventDefault();
             e.stopPropagation();
+            const colIndex = ths.indexOf(th);
             const savedLayout = tableEl.style.tableLayout;
             const savedWidth = tableEl.style.width;
             tableEl.style.tableLayout = 'auto';
@@ -2135,6 +2173,7 @@ function makeResizable(tableEl) {
                 ths.forEach((t, i) => t.style.width = snapWidths[i] + 'px');
             }
             th.style.width = naturalW + 'px';
+            syncColumnMaxWidth(tableEl, colIndex, naturalW);
         });
 
         handle.addEventListener('mousedown', e => {
@@ -2158,11 +2197,14 @@ function makeResizable(tableEl) {
             const startX = e.clientX;
             const startW = th.getBoundingClientRect().width;
 
+            const colIndex = ths.indexOf(th);
             document.body.style.cursor = 'col-resize';
             document.body.style.userSelect = 'none';
 
             const onMove = ev => {
-                th.style.width = Math.max(40, startW + ev.clientX - startX) + 'px';
+                const newW = Math.max(40, startW + ev.clientX - startX);
+                th.style.width = newW + 'px';
+                syncColumnMaxWidth(tableEl, colIndex, newW);
             };
             const onUp = () => {
                 document.body.style.cursor = '';
