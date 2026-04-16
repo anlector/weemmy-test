@@ -12,7 +12,8 @@ const FUNNEL_STAGES = [
 // Per-tab filter field definitions (key matches record/journey property)
 const STOP_DIMENSIONS = [
     { key: 'src',  label: 'Source',      field: 'src' },
-    { key: 'cmp',  label: 'Campaign',    field: 'cmp' },
+    { key: 'cmp',  label: 'Ad Campaign',     field: 'cmp' },
+    { key: 'rcmp', label: 'Ref. Campaign',   field: 'rcmp' },
     { key: 'adg',  label: 'Ad Group',    field: r => r.adg || r.s1 || '' },
     { key: 's4',   label: 'Creative',    field: 's4' },
     { key: 'plc',  label: 'Placement',   field: r => r.plc || r.s2 || '' },
@@ -38,7 +39,7 @@ const TAB_FILTER_FIELDS = {
         { key: 'src', label: 'Source', type: 'select', level: 'journey' },
         { key: 'firstSource', label: 'First Source', type: 'select', level: 'journey' },
         { key: 'subsequentSource', label: 'Subsequent Source', type: 'select', level: 'journey' },
-        { key: 'cmp', label: 'Campaign', type: 'select', level: 'journey' },
+        { key: 'cmp', label: 'Ad Campaign', type: 'select', level: 'journey' },
         { key: 'co', label: 'State', type: 'select', level: 'record' },
         { key: 'hasOrder', label: 'Has Orders', type: 'bool', level: 'journey' },
         { key: 'hasConv', label: 'Has Actions', type: 'bool', level: 'journey' },
@@ -48,7 +49,7 @@ const TAB_FILTER_FIELDS = {
     orders: [
         { key: 'st', label: 'Status', type: 'select', level: 'record' },
         { key: 'app', label: 'App', type: 'select', level: 'record' },
-        { key: 'rcmp', label: 'Campaign', type: 'select', level: 'record' },
+        { key: 'rcmp', label: 'Ref. Campaign', type: 'select', level: 'record' },
         { key: 'nm', label: 'Customer Name', type: 'text', level: 'record' },
         { key: 'em', label: 'Customer Email', type: 'text', level: 'record' },
         { key: 'pr', label: 'Order Value', type: 'number', level: 'record' },
@@ -500,7 +501,7 @@ class Dashboard {
     // Human-readable labels for all known record fields
     static LABEL_MAP = {
         t:'Type', fp:'Fingerprint', dt:'Date',
-        src:'Source', cmp:'Campaign', rcmp:'Referring Campaign',
+        src:'Source', cmp:'Ad Campaign', rcmp:'Ref. Campaign',
         fsrc:'First Source', fmed:'First Medium', lsrc:'Last Source', lmed:'Last Medium',
         s1:'Sub1', s2:'Sub2', s3:'Sub3', s4:'Creative', s5:'Sub5', s6:'Sub6', adg:'Ad Group', plc:'Placement',
         dev:'Device', br:'Browser', os:'OS', ua:'User Agent',
@@ -543,6 +544,7 @@ class Dashboard {
         };
         this._stopsSort = { col: 'count', asc: false };
         this._expandedStopRows = new Set();
+        this._activeStopPopup = null;
         this._tabFilters = {};
         this._currentTab = 'attribution';
         this.filteredJourneys = null;
@@ -565,6 +567,12 @@ class Dashboard {
             this.tpHiddenFields = new Set();
         }
         this.init();
+        document.addEventListener('click', (e) => {
+            if (this._activeStopPopup && !e.target.closest('.stop-popup') && !e.target.closest('.stop-header-btn') && !e.target.closest('#stop-popup-portal') && !e.target.closest('.stop-header-cell')) {
+                this._activeStopPopup = null;
+                if (this._currentTab === 'attribution') this.renderAttribution();
+            }
+        });
     }
 
     // Persists the hidden-fields set to localStorage
@@ -982,7 +990,7 @@ class Dashboard {
         let html = '<table class="tbl"><thead><tr>';
         const cols = [
             {f:'oid',l:'Order ID'},{f:'dt',l:'Date'},{f:'pr',l:'Value'},{f:'st',l:'Status'},
-            {f:'app',l:'App'},{f:'nm',l:'Customer'},{f:'fp',l:'Fingerprint'},{f:'rcmp',l:'Campaign'},{f:'fsrc',l:'First Source'}
+            {f:'app',l:'App'},{f:'nm',l:'Customer'},{f:'fp',l:'Fingerprint'},{f:'rcmp',l:'Ref. Campaign'},{f:'fsrc',l:'First Source'}
         ];
         cols.forEach(c => {
             const cls = s&&s.f===c.f ? (s.d==='asc'?'sort-asc':'sort-desc') : '';
@@ -1033,7 +1041,7 @@ class Dashboard {
         const appLabel = order.app || '';
         const subTag = this.isSubscription(order) ? ' <span class="badge badge-subscription">Subscription</span>' : '';
         html += this.dlRow('App', appLabel + subTag);
-        html += this.dlRow('Campaign',order.rcmp);
+        html += this.dlRow('Ref. Campaign',order.rcmp);
         html += this.dlRow('City',order.ci);
         html += this.dlRow('State',order.co);
         html += this.dlRow('Currency',order.cur);
@@ -1194,14 +1202,14 @@ class Dashboard {
                 let cardBody = '';
                 if(r.t === 'c') {
                     cardBody += kv('Source', r.src);
-                    cardBody += kv('Campaign', tr(r.cmp,28));
+                    cardBody += kv('Ad Campaign', tr(r.cmp,28));
                     cardBody += kv('Ad Group', tr(r.adg||r.s1,24));
                     cardBody += kv('Placement', tr(r.plc||r.s2,24));
                     cardBody += kv('Creative', tr(r.s4,24));
                 } else if(r.t === 'v') {
                     cardBody += kv('Type', r.vt);
                     cardBody += kv('Source', r.src);
-                    cardBody += kv('Campaign', tr(r.cmp,28));
+                    cardBody += kv('Ad Campaign', tr(r.cmp,28));
                     const payout = (r.pay!=null && r.pay!=='') ? `$${Number(r.pay).toFixed(2)}` : '';
                     cardBody += kv('Payout', payout);
                     cardBody += kv('Creative', tr(r.s4,24));
@@ -1212,7 +1220,8 @@ class Dashboard {
                     cardBody += `<div class="route-cell-kv">${oidLink}</div>`;
                     cardBody += kv('Value', value);
                     cardBody += `<div class="route-cell-kv"><span class="badge ${stBadge}">${r.st||'N/A'}</span></div>`;
-                    cardBody += kv('Campaign', tr(r.rcmp||r.cmp,28));
+                    if(r.cmp) cardBody += kv('Ad Campaign', tr(r.cmp,28));
+                    if(r.rcmp) cardBody += kv('Ref. Campaign', tr(r.rcmp,28));
                     if(r.nm) {
                         const custClick = r.cid ? `event.stopPropagation();D.navigateToCustomer('${r.cid}')` : '';
                         cardBody += `<div class="route-cell-kv"><span class="kv-label">Customer</span><a class="xlink" onclick="${custClick}">${tr(r.nm,20)}</a></div>`;
@@ -1309,14 +1318,14 @@ class Dashboard {
             let cardBody = '';
             if (r.t === 'c') {
                 cardBody += kv('Source', r.src);
-                cardBody += kv('Campaign', tr(r.cmp, 28));
+                cardBody += kv('Ad Campaign', tr(r.cmp, 28));
                 cardBody += kv('Ad Group', tr(r.adg || r.s1, 24));
                 cardBody += kv('Placement', tr(r.plc || r.s2, 24));
                 cardBody += kv('Creative', tr(r.s4, 24));
             } else if (r.t === 'v') {
                 cardBody += kv('Type', r.vt);
                 cardBody += kv('Source', r.src);
-                cardBody += kv('Campaign', tr(r.cmp, 28));
+                cardBody += kv('Ad Campaign', tr(r.cmp, 28));
                 const payout = (r.pay != null && r.pay !== '') ? `$${Number(r.pay).toFixed(2)}` : '';
                 cardBody += kv('Payout', payout);
                 cardBody += kv('Creative', tr(r.s4, 24));
@@ -1327,7 +1336,8 @@ class Dashboard {
                 cardBody += `<div class="route-cell-kv">${oidLink}</div>`;
                 cardBody += kv('Value', value);
                 cardBody += `<div class="route-cell-kv"><span class="badge ${stBadge}">${r.st || 'N/A'}</span></div>`;
-                cardBody += kv('Campaign', tr(r.rcmp || r.cmp, 28));
+                if (r.cmp) cardBody += kv('Ad Campaign', tr(r.cmp, 28));
+                if (r.rcmp) cardBody += kv('Ref. Campaign', tr(r.rcmp, 28));
                 if (r.nm) {
                     const custClick = r.cid ? `event.stopPropagation();D.navigateToCustomer('${r.cid}')` : '';
                     cardBody += `<div class="route-cell-kv"><span class="kv-label">Customer</span><a class="xlink" onclick="${custClick}">${tr(r.nm, 20)}</a></div>`;
@@ -1648,7 +1658,6 @@ class Dashboard {
             const value = r.t === 'o' && r.pr != null && r.pr !== '' ? `$${Number(r.pr).toFixed(2)}` : '';
             const stBadge = r.t === 'o' ? (() => { const b = r.st === 'FULFILLED' ? 'badge-green' : r.st === 'PENDING' ? 'badge-orange' : 'badge-grey'; return `<span class="badge ${b}">${r.st || 'N/A'}</span>`; })() : '';
             const source = r.src || r.fsrc || '';
-            const campaign = r.t === 'o' ? (r.rcmp || r.cmp || '') : (r.cmp || '');
             const adGroup = r.adg || r.s1 || '';
             const oidLink = r.oid ? `<a class="xlink" onclick="event.stopPropagation();D.navigateToOrder('${r.oid}')">#${r.oid}</a>` : '';
             const fpLink = r._fp ? `<a class="xlink" onclick="event.stopPropagation();D.showJourneyPathsTable('${r._fp}')" style="font-family:monospace;font-size:11px;">${r._fp}</a>` : '';
@@ -1656,7 +1665,7 @@ class Dashboard {
             html += `<tr class="${type}${this.isSubscription(r) ? ' subscription-row' : ''}${phaseRowCls}${subActRowCls}" style="cursor:pointer;" onclick="D.showTouchpoint('${r._fp}',${r._fpIdx})">
                 <td>${i + 1}</td><td>${typeBadge}${purchaseExtra}</td><td>${r.vt || ''}</td><td style="white-space:nowrap;">${this.fmtDate(r.dt)}</td>
                 <td>${fpLink}</td>
-                <td>${source}</td><td>${campaign}</td><td>${adGroup}</td>
+                <td>${source}</td><td>${r.cmp || ''}</td><td>${r.rcmp || ''}</td><td>${adGroup}</td>
                 <td>${r.s4 || ''}</td>
                 <td>${r.dev || ''}</td><td>${r.br || ''}</td><td>${r.os || ''}</td>
                 <td>${r.co || ''}</td><td>${r.ci || ''}</td><td>${ip}</td>
@@ -1721,7 +1730,7 @@ class Dashboard {
                 <thead>
                     <tr>
                         <th>#</th><th>Order ID</th><th style="cursor:pointer;" id="cust-orders-date-th" class="sort-asc">Date ↑</th><th>Value</th><th>Status</th>
-                        <th>Campaign</th><th>First Source</th><th>Last Source</th>
+                        <th>Ref. Campaign</th><th>First Source</th><th>Last Source</th>
                         <th>App</th><th>City</th><th>State</th><th>Currency</th>
                     </tr>
                 </thead>
@@ -1741,7 +1750,7 @@ class Dashboard {
             <table class="tp-table">
                 <thead>
                     <tr>
-                        <th>#</th><th>Type</th><th>Conv. Type</th><th style="cursor:pointer;" id="cust-tp-date-th" class="sort-asc">Date ↑</th><th>Fingerprint</th><th>Source</th><th>Campaign</th>
+                        <th>#</th><th>Type</th><th>Conv. Type</th><th style="cursor:pointer;" id="cust-tp-date-th" class="sort-asc">Date ↑</th><th>Fingerprint</th><th>Source</th><th>Ad Campaign</th><th>Ref. Campaign</th>
                         <th>Ad Group</th><th>Creative</th><th>Device</th><th>Browser</th><th>OS</th>
                         <th>State</th><th>City</th><th>IP</th>
                         <th>Order</th><th>Customer</th><th>Payout</th><th>Value</th><th>Status</th>
@@ -2055,7 +2064,10 @@ class Dashboard {
             if (!firstClick) return;
             const stop1Val = getStopValue(firstClick, stop1Dim);
             if (!stop1Val) return;
-            if (!result[stop1Val]) result[stop1Val] = { count: 0, stop2Count: 0, stop3Count: 0, fps: [] };
+            if (!result[stop1Val]) result[stop1Val] = {
+                count: 0, stop2Count: 0, stop3Count: 0,
+                fps: [], stop2Fps: [], stop3Fps: [],
+            };
             result[stop1Val].count++;
             result[stop1Val].fps.push(fp);
 
@@ -2064,10 +2076,14 @@ class Dashboard {
                 const stop2Match = sorted.find((r, i) => i > firstClickIdx && getStopValue(r, stop2Dim) === this._stops.stop2.value);
                 if (stop2Match) {
                     result[stop1Val].stop2Count++;
+                    result[stop1Val].stop2Fps.push(fp);
                     if (stop3Dim && this._stops.stop3.value) {
                         const stop2Idx = sorted.indexOf(stop2Match);
                         const stop3Match = sorted.find((r, i) => i > stop2Idx && getStopValue(r, stop3Dim) === this._stops.stop3.value);
-                        if (stop3Match) result[stop1Val].stop3Count++;
+                        if (stop3Match) {
+                            result[stop1Val].stop3Count++;
+                            result[stop1Val].stop3Fps.push(fp);
+                        }
                     }
                 }
             }
@@ -2084,6 +2100,22 @@ class Dashboard {
             if (v) vals.add(v);
         });
         return [...vals].sort();
+    }
+
+    _setStop1Mode(mode) {
+        this._stops.stop1.dimKey = mode === 'campaign' ? 'cmp' : 'src';
+        this._expandedStopRows.clear();
+        this.renderAttribution();
+    }
+
+    _toggleStopPopup(stopNum, event) {
+        if (event) event.stopPropagation();
+        if (this._activeStopPopup === stopNum) {
+            this._activeStopPopup = null;
+        } else {
+            this._activeStopPopup = stopNum;
+        }
+        this.renderAttribution();
     }
 
     setStopDim(stopNum, dimKey) {
@@ -2116,28 +2148,68 @@ class Dashboard {
         this.renderAttribution();
     }
 
+    _renderStopPopup(stopNum) {
+        const stop = this._stops['stop' + stopNum];
+        const currentDimKey = stop.dimKey;
+        const currentValue = stop.value;
+        const borderColor = stopNum === 2 ? 'var(--orange)' : 'var(--green)';
+        let html = '<div class="stop-popup" onclick="event.stopPropagation()" style="border-top:3px solid ' + borderColor + ';">';
+        html += '<div class="stop-popup-title">Configure Stop ' + stopNum + '</div>';
+        html += '<label class="stop-popup-label">Dimension</label>';
+        html += '<select class="stop-popup-select" onchange="D.setStopDim(' + stopNum + ', this.value);D._activeStopPopup=' + stopNum + ';">';
+        html += '<option value="">— Not set —</option>';
+        STOP_DIMENSIONS.forEach(d => {
+            html += '<option value="' + d.key + '"' + (d.key === currentDimKey ? ' selected' : '') + '>' + d.label + '</option>';
+        });
+        html += '</select>';
+        if (currentDimKey) {
+            const vals = this._getStopDimValues(currentDimKey);
+            html += '<label class="stop-popup-label" style="margin-top:8px;">Value</label>';
+            html += '<select class="stop-popup-select" onchange="D.setStopValue(' + stopNum + ', this.value);D._activeStopPopup=' + stopNum + ';">';
+            html += '<option value="">— Select value —</option>';
+            vals.forEach(v => {
+                const esc = String(v).replace(/"/g, '&quot;');
+                html += '<option value="' + esc + '"' + (v === currentValue ? ' selected' : '') + '>' + v + '</option>';
+            });
+            html += '</select>';
+            html += '<button class="stop-popup-clear" onclick="D.setStopDim(' + stopNum + ', null);D._activeStopPopup=null;">Clear Stop ' + stopNum + '</button>';
+        }
+        html += '</div>';
+        return html;
+    }
+
     _renderStopFingerprints(fps) {
-        if (!fps || !fps.length) return '<div style="padding:8px;color:var(--text-dim);">No journeys</div>';
-        let html = '<div class="stops-fps-container"><table class="stops-fps-table"><thead><tr>';
-        html += '<th>#</th><th>Fingerprint</th><th>Customer</th><th>Touchpoints</th><th>Revenue</th><th>First Seen</th><th>Last Seen</th>';
+        if (!fps || !fps.length) return '<div style="padding:12px 20px;color:var(--text-dim);font-size:13px;">No matching journeys</div>';
+        let html = '<div style="padding:10px 20px 14px 36px;max-height:340px;overflow-y:auto;">';
+        html += '<table class="tbl"><thead><tr>';
+        html += '<th style="width:40px;">#</th>';
+        html += '<th>Fingerprint</th>';
+        html += '<th>Customer</th>';
+        html += '<th>Source</th>';
+        html += '<th style="text-align:center;">Touchpoints</th>';
+        html += '<th>Revenue</th>';
+        html += '<th>First Seen</th>';
+        html += '<th>Last Seen</th>';
         html += '</tr></thead><tbody>';
         fps.forEach((fp, i) => {
             const journey = this.journeys.find(j => j.fp === fp);
             if (!journey) return;
-            const custLabel = journey.custName || journey.custEmail || '';
+            const custLabel = journey.custName || journey.custEmail || '—';
             const custLink = journey.custId
                 ? '<a class="xlink" onclick="event.stopPropagation();D.navigateToCustomer(\'' + journey.custId + '\')">' + custLabel + '</a>'
                 : custLabel;
-            const fpShort = fp.substring(0, 14) + '…';
-            const rev = journey.revenue ? '$' + journey.revenue.toFixed(2) : '';
+            const fpShort = fp.length > 16 ? fp.substring(0, 14) + '…' : fp;
+            const rev = journey.revenue ? '$' + journey.revenue.toFixed(2) : '—';
+            const src = journey.src || '—';
             html += '<tr onclick="event.stopPropagation();D.showJourneyPathsTable(\'' + fp + '\')">';
             html += '<td>' + (i + 1) + '</td>';
             html += '<td><a class="xlink" style="font-family:monospace;font-size:12px;">' + fpShort + '</a></td>';
             html += '<td>' + custLink + '</td>';
-            html += '<td>' + journey.count + '</td>';
+            html += '<td>' + src + '</td>';
+            html += '<td style="text-align:center;">' + journey.count + '</td>';
             html += '<td>' + rev + '</td>';
-            html += '<td>' + (this.fmtDate(journey.firstDate) || '') + '</td>';
-            html += '<td>' + (this.fmtDate(journey.lastDate) || '') + '</td>';
+            html += '<td>' + (this.fmtDate(journey.firstDate) || '—') + '</td>';
+            html += '<td>' + (this.fmtDate(journey.lastDate) || '—') + '</td>';
             html += '</tr>';
         });
         html += '</tbody></table></div>';
@@ -2147,8 +2219,11 @@ class Dashboard {
     renderAttribution() {
         const container = document.getElementById('tab-attribution');
         if (!container) return;
+        container.style.position = 'relative';
 
-        const stop1Dim = STOP_DIMENSIONS.find(d => d.key === this._stops.stop1.dimKey) || STOP_DIMENSIONS[0];
+        const isSourceMode = this._stops.stop1.dimKey === 'src';
+        const stop2Dim = this._stops.stop2.dimKey ? STOP_DIMENSIONS.find(d => d.key === this._stops.stop2.dimKey) : null;
+        const stop3Dim = this._stops.stop3.dimKey ? STOP_DIMENSIONS.find(d => d.key === this._stops.stop3.dimKey) : null;
         const stop2Active = this._stops.stop2.dimKey && this._stops.stop2.value;
         const stop3Active = this._stops.stop3.dimKey && this._stops.stop3.value;
 
@@ -2168,112 +2243,90 @@ class Dashboard {
         });
 
         const totalJourneys = rows.reduce((s, [, d]) => s + d.count, 0);
-
-        let html = '<div class="stops-header">';
-        html += '<h3 style="font-size:16px;font-weight:700;margin:0;">Path Stops</h3>';
-        html += '<span style="font-size:12px;color:var(--text-dim);margin-left:auto;">' + totalJourneys + ' journeys across ' + rows.length + ' ' + stop1Dim.label.toLowerCase() + 's</span>';
-        html += '</div>';
-
-        html += '<div class="stops-config">';
-
-        html += '<div class="stop-config stop-config-1">';
-        html += '<div class="stop-label">Stop 1</div>';
-        html += '<select class="stop-dim-select" onchange="D.setStopDim(1, this.value)">';
-        STOP_DIMENSIONS.forEach(d => {
-            html += '<option value="' + d.key + '"' + (d.key === this._stops.stop1.dimKey ? ' selected' : '') + '>' + d.label + '</option>';
-        });
-        html += '</select></div>';
-
-        html += '<div class="stop-config stop-config-2">';
-        html += '<div class="stop-label">Stop 2 <span class="stop-optional">(optional)</span></div>';
-        html += '<select class="stop-dim-select" onchange="D.setStopDim(2, this.value)">';
-        html += '<option value="">— Not set —</option>';
-        STOP_DIMENSIONS.forEach(d => {
-            html += '<option value="' + d.key + '"' + (d.key === this._stops.stop2.dimKey ? ' selected' : '') + '>' + d.label + '</option>';
-        });
-        html += '</select>';
-        if (this._stops.stop2.dimKey) {
-            const vals = this._getStopDimValues(this._stops.stop2.dimKey);
-            html += '<select class="stop-val-select" onchange="D.setStopValue(2, this.value)">';
-            html += '<option value="">— Select value —</option>';
-            vals.forEach(v => {
-                const esc = String(v).replace(/"/g, '&quot;');
-                html += '<option value="' + esc + '"' + (v === this._stops.stop2.value ? ' selected' : '') + '>' + v + '</option>';
-            });
-            html += '</select>';
-        }
-        html += '</div>';
-
-        html += '<div class="stop-config stop-config-3">';
-        if (stop2Active) {
-            html += '<div class="stop-label">Stop 3 <span class="stop-optional">(optional)</span></div>';
-            html += '<select class="stop-dim-select" onchange="D.setStopDim(3, this.value)">';
-            html += '<option value="">— Not set —</option>';
-            STOP_DIMENSIONS.forEach(d => {
-                html += '<option value="' + d.key + '"' + (d.key === this._stops.stop3.dimKey ? ' selected' : '') + '>' + d.label + '</option>';
-            });
-            html += '</select>';
-            if (this._stops.stop3.dimKey) {
-                const vals = this._getStopDimValues(this._stops.stop3.dimKey);
-                html += '<select class="stop-val-select" onchange="D.setStopValue(3, this.value)">';
-                html += '<option value="">— Select value —</option>';
-                vals.forEach(v => {
-                    const esc = String(v).replace(/"/g, '&quot;');
-                    html += '<option value="' + esc + '"' + (v === this._stops.stop3.value ? ' selected' : '') + '>' + v + '</option>';
-                });
-                html += '</select>';
-            }
-        }
-        html += '</div></div>';
-
         const arrow = col => this._stopsSort.col === col ? (this._stopsSort.asc ? ' ↑' : ' ↓') : '';
+
+        let html = '<div style="display:flex;align-items:center;gap:12px;padding:16px 20px 12px;flex-wrap:wrap;">';
+        html += '<h3 style="font-size:16px;font-weight:700;margin:0;">Attribution Analysis</h3>';
+        html += '<div style="display:flex;gap:4px;">';
+        html += '<button class="btn-attr' + (isSourceMode ? ' active' : '') + '" onclick="D._setStop1Mode(\'source\')">By Source</button>';
+        html += '<button class="btn-attr' + (!isSourceMode ? ' active' : '') + '" onclick="D._setStop1Mode(\'campaign\')">By Campaign</button>';
+        html += '</div>';
+        html += '<span style="font-size:12px;color:var(--text-dim);margin-left:auto;">' + totalJourneys + ' journeys across ' + rows.length + ' ' + (isSourceMode ? 'sources' : 'campaigns') + '</span>';
+        html += '</div>';
+
         const maxCount = rows.length ? Math.max(...rows.map(([, d]) => d.count)) : 1;
         const maxStop2 = rows.length ? Math.max(...rows.map(([, d]) => d.stop2Count), 1) : 1;
         const maxStop3 = rows.length ? Math.max(...rows.map(([, d]) => d.stop3Count), 1) : 1;
-        const stop2Dim = this._stops.stop2.dimKey ? STOP_DIMENSIONS.find(d => d.key === this._stops.stop2.dimKey) : null;
-        const stop3Dim = this._stops.stop3.dimKey ? STOP_DIMENSIONS.find(d => d.key === this._stops.stop3.dimKey) : null;
-
-        html += '<div style="overflow-x:auto;">';
-        html += '<table class="tbl" id="stops-table"><thead><tr>';
-        html += '<th onclick="D.sortStops(\'name\')">' + stop1Dim.label + arrow('name') + '</th>';
-        html += '<th onclick="D.sortStops(\'count\')">Journeys' + arrow('count') + '</th>';
-        if (stop2Active) {
-            const s2Label = stop2Dim.label + ': ' + this._stops.stop2.value;
-            html += '<th onclick="D.sortStops(\'stop2Count\')" title="' + s2Label.replace(/"/g, '&quot;') + '">Stop 2' + arrow('stop2Count') + '</th>';
-        }
-        if (stop3Active) {
-            const s3Label = stop3Dim.label + ': ' + this._stops.stop3.value;
-            html += '<th onclick="D.sortStops(\'stop3Count\')" title="' + s3Label.replace(/"/g, '&quot;') + '">Stop 3' + arrow('stop3Count') + '</th>';
-        }
-        html += '</tr></thead><tbody>';
 
         const barHtml = (val, max, cls) => {
             const w = max > 0 ? Math.round((val / max) * 80) : 0;
             return '<div class="stops-bar ' + cls + '" style="width:' + Math.max(w, 2) + 'px"></div>';
         };
 
+        let stop2Label = 'Stop 2', stop2Subtitle = '';
+        if (stop2Active) { stop2Label = stop2Dim.label; stop2Subtitle = this._stops.stop2.value; }
+        let stop3Label = 'Stop 3', stop3Subtitle = '';
+        if (stop3Active) { stop3Label = stop3Dim.label; stop3Subtitle = this._stops.stop3.value; }
+
+        html += '<div style="overflow-x:auto;padding:0 20px 20px;">';
+        html += '<table class="tbl" id="stops-table"><thead><tr>';
+        html += '<th onclick="D.sortStops(\'name\')" style="cursor:pointer;">' + (isSourceMode ? 'Source' : 'Ad Campaign') + arrow('name') + '</th>';
+        html += '<th onclick="D.sortStops(\'count\')" style="cursor:pointer;">Journeys' + arrow('count') + '</th>';
+
+        html += '<th class="stop-header-cell" data-stop="2" style="cursor:pointer;" onclick="D._toggleStopPopup(2, event)">';
+        html += '<span class="stop-header-btn">';
+        if (stop2Active) {
+            html += stop2Label + arrow('stop2Count');
+            html += '<div style="font-size:10px;font-weight:400;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;" title="' + stop2Subtitle.replace(/"/g, '&quot;') + '">' + stop2Subtitle + '</div>';
+        } else {
+            html += '<span style="color:var(--text-dim);font-weight:500;">+ Stop 2</span>';
+        }
+        html += '</span>';
+        html += '</th>';
+
+        if (stop2Active) {
+            html += '<th class="stop-header-cell" data-stop="3" style="cursor:pointer;" onclick="D._toggleStopPopup(3, event)">';
+            html += '<span class="stop-header-btn">';
+            if (stop3Active) {
+                html += stop3Label + arrow('stop3Count');
+                html += '<div style="font-size:10px;font-weight:400;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;" title="' + stop3Subtitle.replace(/"/g, '&quot;') + '">' + stop3Subtitle + '</div>';
+            } else {
+                html += '<span style="color:var(--text-dim);font-weight:500;">+ Stop 3</span>';
+            }
+            html += '</span>';
+            html += '</th>';
+        }
+
+        html += '</tr></thead><tbody>';
+
         rows.forEach(([name, d]) => {
             const isExpanded = this._expandedStopRows.has(name);
             const expandIcon = isExpanded ? '▾' : '▸';
             const rowClass = isExpanded ? 'stops-row-expanded' : '';
-            const escapedName = name.replace(/'/g, "\\'").replace(/\\/g, '\\\\');
+            const escapedName = name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
             html += '<tr class="stops-row ' + rowClass + '" onclick="D.toggleStopRow(\'' + escapedName + '\')">';
-            html += '<td class="stops-name-cell"><span class="stops-expand-icon">' + expandIcon + '</span> ' + name + '</td>';
+            html += '<td style="font-weight:600;white-space:nowrap;"><span style="color:var(--text-dim);font-size:12px;display:inline-block;width:14px;">' + expandIcon + '</span> ' + name + '</td>';
             html += '<td>' + barHtml(d.count, maxCount, 'stops-bar-1') + ' ' + d.count + '</td>';
-            if (stop2Active) html += '<td>' + barHtml(d.stop2Count, maxStop2, 'stops-bar-2') + ' ' + d.stop2Count + '</td>';
-            if (stop3Active) html += '<td>' + barHtml(d.stop3Count, maxStop3, 'stops-bar-3') + ' ' + d.stop3Count + '</td>';
+            html += '<td>' + (stop2Active ? barHtml(d.stop2Count, maxStop2, 'stops-bar-2') + ' ' + d.stop2Count : '<span style="color:#d1d5db;">—</span>') + '</td>';
+            if (stop2Active) {
+                html += '<td>' + (stop3Active ? barHtml(d.stop3Count, maxStop3, 'stops-bar-3') + ' ' + d.stop3Count : '<span style="color:#d1d5db;">—</span>') + '</td>';
+            }
             html += '</tr>';
 
             if (isExpanded) {
-                const colSpan = 2 + (stop2Active ? 1 : 0) + (stop3Active ? 1 : 0);
+                const colSpan = 3 + (stop2Active ? 1 : 0);
+                const activeFps = stop3Active ? d.stop3Fps
+                                : stop2Active ? d.stop2Fps
+                                : d.fps;
                 html += '<tr class="stops-expansion-row"><td colspan="' + colSpan + '">';
-                html += this._renderStopFingerprints(d.fps);
+                html += this._renderStopFingerprints(activeFps);
                 html += '</td></tr>';
             }
         });
 
         html += '</tbody></table></div>';
+        html += '<div id="stop-popup-portal"></div>';
         container.innerHTML = html;
 
         const table = document.getElementById('stops-table');
@@ -2286,6 +2339,22 @@ class Dashboard {
                 });
             });
         }
+
+        if (this._activeStopPopup) {
+            const portalEl = document.getElementById('stop-popup-portal');
+            const headerCell = document.querySelector('.stop-header-cell[data-stop="' + this._activeStopPopup + '"]');
+            if (portalEl && headerCell) {
+                const rect = headerCell.getBoundingClientRect();
+                const containerRect = container.getBoundingClientRect();
+                const leftPos = rect.left - containerRect.left;
+                const topPos = rect.bottom - containerRect.top + 4;
+                portalEl.innerHTML = this._renderStopPopup(this._activeStopPopup);
+                portalEl.style.position = 'absolute';
+                portalEl.style.left = leftPos + 'px';
+                portalEl.style.top = topPos + 'px';
+                portalEl.style.zIndex = '200';
+            }
+        }
     }
 
     // Compact touchpoint table shared by order detail and journey path panels
@@ -2297,7 +2366,7 @@ class Dashboard {
         let html = `<div style="overflow-x:auto;">
             <table class="tp-table">
                 <thead><tr>
-                    <th>#</th><th>Type</th><th>Conv. Type</th><th>Date</th><th>Source</th><th>Campaign</th>
+                    <th>#</th><th>Type</th><th>Conv. Type</th><th>Date</th><th>Source</th><th>Ad Campaign</th><th>Ref. Campaign</th>
                     <th>Ad Group</th><th>Creative</th><th>Sub5</th><th>Sub6</th><th>Device</th><th>Browser</th><th>OS</th>
                         <th>State</th><th>City</th><th>IP</th>
                         <th>Order</th><th>Customer</th><th>Payout</th><th>Value</th><th>Status</th>
@@ -2317,7 +2386,6 @@ class Dashboard {
             const value = r.t === 'o' && r.pr != null && r.pr !== '' ? `$${Number(r.pr).toFixed(2)}` : '';
             const stBadge = r.t === 'o' ? (() => { const b = r.st === 'FULFILLED' ? 'badge-green' : r.st === 'PENDING' ? 'badge-orange' : 'badge-grey'; return `<span class="badge ${b}">${r.st || 'N/A'}</span>`; })() : '';
             const source = r.src || r.fsrc || '';
-            const campaign = r.t === 'o' ? (r.rcmp || r.cmp || '') : (r.cmp || '');
             const adGroup = r.adg || r.s1 || '';
             const oidLink = r.oid ? `<a class="xlink" onclick="event.stopPropagation();D.navigateToOrder('${r.oid}')">#${r.oid}</a>` : '';
             const custLink = r.nm ? (r.cid ? `<a class="xlink" onclick="event.stopPropagation();D.navigateToCustomer('${r.cid}')">${r.nm}</a>` : r.nm) : '';
@@ -2325,7 +2393,7 @@ class Dashboard {
             const subActRowCls = this.isSubscriptionAction(r) ? ' sub-action-row' : '';
             html += `<tr class="${type}${this.isSubscription(r) ? ' subscription-row' : ''}${phaseRowCls}${subActRowCls}" style="cursor:pointer;" onclick="D.showTouchpoint('${fp}',${i})">
                 <td>${i + 1}</td><td>${typeBadge}${purchaseExtra}</td><td>${r.vt || ''}</td><td style="white-space:nowrap;">${this.fmtDate(r.dt)}</td>
-                <td>${source}</td><td>${campaign}</td><td>${adGroup}</td>
+                <td>${source}</td><td>${r.cmp || ''}</td><td>${r.rcmp || ''}</td><td>${adGroup}</td>
                 <td>${r.s4 || ''}</td><td>${r.s5 || ''}</td><td>${r.s6 || ''}</td>
                 <td>${r.dev || ''}</td><td>${r.br || ''}</td><td>${r.os || ''}</td>
                 <td>${r.co || ''}</td><td>${r.ci || ''}</td><td>${ip}</td>
@@ -2468,12 +2536,18 @@ class Dashboard {
 // Measures natural column widths (clamped 50–400px), then applies fixed-width layout
 function autoFitColumns(tableEl) {
     if(!tableEl || !tableEl.querySelector('thead')) return;
-    const ths = Array.from(tableEl.querySelectorAll('thead th'));
+    const ths = Array.from(tableEl.querySelectorAll(':scope > thead > tr > th'));
     if(!ths.length) return;
-    const allTds = Array.from(tableEl.querySelectorAll('tbody td'));
-    if(!allTds.length) return;
+    const colCount = ths.length;
+    const directRows = Array.from(tableEl.querySelectorAll(':scope > tbody > tr'));
+    const regularCells = [];
+    directRows.forEach(row => {
+        const tds = Array.from(row.querySelectorAll(':scope > td'));
+        if (tds.length === colCount) regularCells.push(...tds);
+    });
+    if(!regularCells.length) return;
 
-    allTds.forEach(td => td.style.maxWidth = 'none');
+    regularCells.forEach(td => td.style.maxWidth = 'none');
 
     tableEl.style.tableLayout = 'auto';
     tableEl.style.width = 'auto';
@@ -2490,8 +2564,8 @@ function autoFitColumns(tableEl) {
     tableEl.style.width = Math.max(totalWidth, containerWidth) + 'px';
     ths.forEach((th, i) => th.style.width = naturalWidths[i] + 'px');
 
-    allTds.forEach((td, i) => {
-        const colIndex = i % ths.length;
+    regularCells.forEach((td, i) => {
+        const colIndex = i % colCount;
         td.style.maxWidth = naturalWidths[colIndex] + 'px';
     });
 }
@@ -2499,21 +2573,19 @@ function autoFitColumns(tableEl) {
 // Highlights all cells in a column when hovering its header
 function addColumnHighlight(tableEl) {
     if (!tableEl || !tableEl.querySelector('thead')) return;
-    const ths = Array.from(tableEl.querySelectorAll('thead th'));
+    const ths = Array.from(tableEl.querySelectorAll(':scope > thead > tr > th'));
 
     ths.forEach((th, colIndex) => {
         th.addEventListener('mouseenter', () => {
-            const rows = tableEl.querySelectorAll('tbody tr');
-            rows.forEach(row => {
+            tableEl.querySelectorAll(':scope > tbody > tr').forEach(row => {
                 const td = row.children[colIndex];
-                if (td) td.classList.add('col-highlight');
+                if (td && !td.hasAttribute('colspan')) td.classList.add('col-highlight');
             });
         });
         th.addEventListener('mouseleave', () => {
-            const rows = tableEl.querySelectorAll('tbody tr');
-            rows.forEach(row => {
+            tableEl.querySelectorAll(':scope > tbody > tr').forEach(row => {
                 const td = row.children[colIndex];
-                if (td) td.classList.remove('col-highlight');
+                if (td && !td.hasAttribute('colspan')) td.classList.remove('col-highlight');
             });
         });
     });
@@ -2521,19 +2593,19 @@ function addColumnHighlight(tableEl) {
 
 // Updates max-width on all tbody cells in a given column to match the header width
 function syncColumnMaxWidth(tableEl, colIndex, width) {
-    const rows = tableEl.querySelectorAll('tbody tr');
+    const rows = tableEl.querySelectorAll(':scope > tbody > tr');
     rows.forEach(row => {
         const td = row.children[colIndex];
-        if (td) td.style.maxWidth = width + 'px';
+        if (td && !td.hasAttribute('colspan')) td.style.maxWidth = width + 'px';
     });
 }
 
 // Adds drag handles to table column headers for manual resize (+ double-click to auto-fit)
 function makeResizable(tableEl) {
     if(!tableEl) return;
-    tableEl.querySelectorAll('.col-rz').forEach(h => h.remove());
+    tableEl.querySelectorAll(':scope > thead .col-rz').forEach(h => h.remove());
 
-    const ths = Array.from(tableEl.querySelectorAll('thead th'));
+    const ths = Array.from(tableEl.querySelectorAll(':scope > thead > tr > th'));
 
     ths.forEach(th => {
         const handle = document.createElement('div');
@@ -2682,6 +2754,9 @@ window.D = {
     setStopValue: () => {},
     sortStops: () => {},
     toggleStopRow: () => {},
+    _setStop1Mode: () => {},
+    _toggleStopPopup: () => {},
+    _activeStopPopup: null,
 };
 
 // Main init: tries to load CSV from ?csvUrl= param (or default file), falls back to file upload

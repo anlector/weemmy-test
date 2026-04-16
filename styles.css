@@ -294,33 +294,31 @@ body.col-resizing, body.col-resizing * { cursor:col-resize !important; user-sele
 }
 
 /* Attribution tab */
-/* Path Stops */
-.stops-header { display:flex; align-items:center; gap:12px; padding:16px 20px 8px; }
-.stops-config { display:flex; gap:16px; padding:8px 20px 16px; flex-wrap:wrap; }
-.stop-config { display:flex; flex-direction:column; gap:6px; min-width:180px; padding:10px 14px; background:var(--bg-card); border-radius:8px; border:1px solid #e5e7eb; }
-.stop-config-1 { border-left:3px solid var(--blue); }
-.stop-config-2 { border-left:3px solid var(--orange); }
-.stop-config-3 { border-left:3px solid var(--green); }
-.stop-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-dim); }
-.stop-optional { font-weight:400; text-transform:none; letter-spacing:0; }
-.stop-dim-select, .stop-val-select { padding:5px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:13px; background:#fff; color:var(--text); cursor:pointer; }
-.stop-val-select { max-width:260px; }
-.stops-row { cursor:pointer; }
-.stops-row:hover { background:#f9fafb; }
-.stops-row-expanded { background:#f9fafb; }
-.stops-name-cell { font-weight:600; white-space:nowrap; }
-.stops-expand-icon { color:var(--text-dim); font-size:12px; display:inline-block; width:14px; }
+/* Attribution / Path Stops */
+.btn-attr { padding:5px 14px; border:1px solid #e5e7eb; border-radius:6px; background:#fff; color:var(--text); font-size:13px; font-weight:500; cursor:pointer; transition:all 0.15s; }
+.btn-attr:hover { border-color:var(--brand); color:var(--brand); }
+.btn-attr.active { background:var(--brand); color:#fff; border-color:var(--brand); }
+
+.stops-row { cursor:pointer; transition:background 0.1s; }
+.stops-row:hover { background:rgba(0,120,146,0.04); }
+.stops-row-expanded { background:rgba(0,120,146,0.04); }
+.stops-expansion-row td { padding:0 !important; background:#f9fafb; }
+
 .stops-bar { display:inline-block; height:14px; border-radius:3px; vertical-align:middle; margin-right:6px; }
 .stops-bar-1 { background:var(--blue-light); border:1px solid var(--blue); opacity:0.7; }
 .stops-bar-2 { background:var(--orange-light); border:1px solid var(--orange); opacity:0.7; }
 .stops-bar-3 { background:var(--green-light); border:1px solid var(--green); opacity:0.7; }
-.stops-expansion-row td { padding:0 !important; background:#f9fafb; }
-.stops-fps-container { padding:8px 16px 12px 32px; max-height:300px; overflow-y:auto; }
-.stops-fps-table { width:100%; font-size:12px; border-collapse:collapse; }
-.stops-fps-table th { text-align:left; padding:4px 10px; font-size:10px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-dim); border-bottom:1px solid #e5e7eb; }
-.stops-fps-table td { padding:6px 10px; border-bottom:1px solid #f0f0f0; }
-.stops-fps-table tr { cursor:pointer; }
-.stops-fps-table tr:hover { background:#eef2ff; }
+
+.stop-header-btn { display:flex; flex-direction:column; align-items:flex-start; }
+.stop-header-cell:hover .stop-header-btn { color:var(--brand); }
+
+.stop-popup { min-width:240px; background:#fff; border:1px solid #e5e7eb; border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,0.12); padding:14px; }
+.stop-popup-title { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-dim); margin-bottom:10px; }
+.stop-popup-label { font-size:11px; font-weight:600; color:var(--text-dim); display:block; margin-bottom:4px; }
+.stop-popup-select { width:100%; padding:6px 10px; border:1px solid #e5e7eb; border-radius:6px; font-size:13px; background:#fff; color:var(--text); cursor:pointer; }
+.stop-popup-select:focus { outline:none; border-color:var(--brand); box-shadow:0 0 0 2px rgba(0,120,146,0.12); }
+.stop-popup-clear { margin-top:10px; width:100%; padding:6px 10px; border:1px solid #e5e7eb; border-radius:6px; background:#fff; color:var(--red); font-size:12px; font-weight:500; cursor:pointer; transition:all 0.15s; }
+.stop-popup-clear:hover { background:#fef2f2; border-color:var(--red); }
 
 /* Funnel toggle button in filter bar */
 .btn-funnel-toggle { font-size:13px; color:#ffffff; cursor:pointer; user-select:none; font-weight:500; padding:7px 16px; border:1px solid rgba(255,255,255,0.5); border-radius:6px; background:rgba(255,255,255,0.08); transition:all 0.2s; white-space:nowrap; align-self:flex-end; margin-left:auto; }
