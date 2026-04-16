@@ -85,14 +85,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto
 .j-dot.order { background:var(--green); }
 .j-line { width:12px; height:2px; background:#e5e7eb; }
 
-/* Detail Panel (overlay) */
-.overlay { display:none; position:fixed; top:0; right:0; bottom:0; left:0; z-index:100; }
-.overlay.open { display:flex; }
-.overlay-bg { position:absolute; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.3); }
-.detail-panel { position:absolute; top:0; right:0; bottom:0; width:75vw; max-width:100%; background:var(--bg); overflow-y:auto; box-shadow:-4px 0 20px rgba(0,0,0,0.15); padding:24px; z-index:1; }
-.detail-header { display:flex; justify-content:space-between; align-items:center; padding:0 0 8px; position:sticky; top:0; background:var(--bg); z-index:2; }
-.detail-close { width:32px; height:32px; border-radius:50%; border:none; background:#f3f4f6; cursor:pointer; font-size:18px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-.detail-close:hover { background:#e5e7eb; }
+/* Detail Panel (full-width, below tabs) */
+.detail-container { display:none; width:100%; background:var(--bg-card); border-radius:var(--radius); box-shadow:0 1px 3px rgba(0,0,0,0.06); overflow:hidden; }
+.detail-container.open { display:block; }
+.detail-container .detail-header { display:flex; justify-content:space-between; align-items:center; padding:12px 24px 8px; position:sticky; top:0; background:var(--bg-card); z-index:10; }
+.detail-container .detail-content { padding:0 24px 24px; }
+.detail-close { background:#f3f4f6; border:none; font-size:1.5rem; cursor:pointer; color:#374151; width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:background 0.15s,color 0.15s; }
+.detail-close:hover { background:#e5e7eb; color:#111827; }
 .detail-back { background:none; border:none; color:#007892; font-size:0.9rem; font-weight:500; cursor:pointer; padding:4px 8px; border-radius:4px; }
 .detail-back:hover { background:rgba(0,120,146,0.08); }
 
@@ -120,12 +119,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto
 /* Customer sidebar */
 .cust-card { background:var(--bg-card); border-radius:8px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,0.06); margin-bottom:16px; }
 .cust-card h4 { font-size:14px; font-weight:600; margin-bottom:10px; }
-.cust-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px 16px; font-size:12px; }
-.cust-grid dt { color:var(--text-dim); }
-.cust-grid dd { font-weight:500; }
+.cust-grid { display:grid; grid-template-columns:auto 1fr; gap:0; font-size:12px; }
+.cust-grid dt { color:var(--text-dim); padding:7px 16px 7px 0; border-bottom:1px solid #f0f0f0; white-space:nowrap; }
+.cust-grid dd { font-weight:500; padding:7px 0; border-bottom:1px solid #f0f0f0; word-break:break-all; }
+.cust-grid dt:last-of-type, .cust-grid dd:last-of-type { border-bottom:none; }
 
 /* Section title in detail */
-.detail-title { font-size:18px; font-weight:700; margin-bottom:16px; padding-right:40px; }
+.detail-title { font-size:18px; font-weight:700; margin-bottom:16px; }
 .detail-sub { font-size:14px; font-weight:600; margin:16px 0 10px; color:var(--text-dim); }
 
 /* Pagination */
@@ -251,12 +251,6 @@ a.xlink:hover { text-decoration:underline; }
 .col-rz:hover::after { background:#007892; }
 body.col-resizing, body.col-resizing * { cursor:col-resize !important; user-select:none !important; }
 
-@media(max-width:1200px){
-    .detail-panel{width:85vw;}
-}
-@media(max-width:1024px){
-    .detail-panel{width:100%;}
-}
 /* Per-tab filter builder (Level 2) */
 .tab-filters { padding:4px 0 2px; display:flex; flex-direction:column; gap:4px; }
 .tab-filters-rows { display:flex; flex-direction:column; gap:5px; }

@@ -512,8 +512,12 @@ class Dashboard {
         this.filteredJourneys = null;
         this.filteredOrders = null;
         this.filteredCustomers = null;
-        this._panelHistory = [];
-        this._currentPanelView = null;
+        this._panelStates = {
+            route:       { history: [], current: null, scrollTop: 0 },
+            orders:      { history: [], current: null, scrollTop: 0 },
+            customers:   { history: [], current: null, scrollTop: 0 },
+            attribution: { history: [], current: null, scrollTop: 0 },
+        };
         this._skipPanelPush = false;
         // Load saved field visibility config from localStorage
         // tpHiddenFields: Set of field keys the user has chosen to hide
@@ -535,39 +539,77 @@ class Dashboard {
         return !this.tpHiddenFields.has(key);
     }
 
+    _panelState() {
+        const tab = this._currentTab || 'route';
+        return this._panelStates[tab];
+    }
+
     _pushPanelState(method, args) {
-        const panel = document.querySelector('.detail-panel');
-        this._panelHistory.push({
+        const container = document.getElementById('detail-container');
+        this._panelState().history.push({
             method,
             args,
-            scrollTop: panel ? panel.scrollTop : 0
+            scrollTop: container ? container.scrollTop : 0
         });
     }
 
     _trackPanelView(method, args) {
-        if (!this._skipPanelPush && this._currentPanelView) {
-            this._pushPanelState(this._currentPanelView.method, this._currentPanelView.args);
+        const state = this._panelState();
+        if (state.current && state.current.method === method && JSON.stringify(state.current.args) === JSON.stringify(args)) {
+            return;
         }
-        this._currentPanelView = { method, args };
+        if (!this._skipPanelPush && state.current) {
+            this._pushPanelState(state.current.method, state.current.args);
+        }
+        state.current = { method, args };
     }
 
     _panelHeaderHtml() {
-        const backBtn = this._panelHistory.length > 0
+        const history = this._panelState().history;
+        const backBtn = history.length > 0
             ? '<button class="detail-back" onclick="D.panelGoBack()">← Back</button>'
             : '<span></span>';
         return `<div class="detail-header">${backBtn}<button class="detail-close" onclick="D.closeDetail()">×</button></div>`;
     }
 
+    _openDetailContainer(html) {
+        const container = document.getElementById('detail-container');
+        container.innerHTML = `${this._panelHeaderHtml()}<div class="detail-content">${html}</div>`;
+        container.classList.add('open');
+        container.style.display = '';
+        this._hideActiveTabBody();
+        window.scrollTo({ top: 0, behavior: 'instant' });
+    }
+
+    _hideActiveTabBody() {
+        document.querySelectorAll('.tab-body').forEach(tb => tb.style.display = 'none');
+        const tabFilters = document.getElementById('tab-filters');
+        if (tabFilters) tabFilters.style.display = 'none';
+    }
+
+    _showActiveTabBody() {
+        const activeTab = this._currentTab || 'route';
+        document.querySelectorAll('.tab-body').forEach(tb => {
+            tb.style.display = tb.id === 'tab-' + activeTab ? '' : 'none';
+        });
+        document.querySelectorAll('.tab-body').forEach(tb => {
+            tb.classList.toggle('active', tb.id === 'tab-' + activeTab);
+        });
+        const tabFilters = document.getElementById('tab-filters');
+        if (tabFilters) tabFilters.style.display = '';
+    }
+
     panelGoBack() {
-        if (!this._panelHistory.length) return;
-        const prev = this._panelHistory.pop();
+        const state = this._panelState();
+        if (!state.history.length) return;
+        const prev = state.history.pop();
         this._skipPanelPush = true;
-        this._currentPanelView = { method: prev.method, args: prev.args };
+        state.current = { method: prev.method, args: prev.args };
         this[prev.method](...prev.args);
         this._skipPanelPush = false;
         requestAnimationFrame(() => {
-            const panel = document.querySelector('.detail-panel');
-            if (panel) panel.scrollTop = prev.scrollTop;
+            const container = document.getElementById('detail-container');
+            if (container) container.scrollTop = prev.scrollTop;
         });
     }
 
@@ -810,16 +852,44 @@ class Dashboard {
 
     // --- TABS ---
     switchTab(tab) {
+        const prevTab = this._currentTab || 'route';
+        const container = document.getElementById('detail-container');
+        const panelIsOpen = container && container.classList.contains('open');
+
+        if (panelIsOpen) {
+            this._panelStates[prevTab].scrollTop = container.scrollTop || 0;
+        }
+
         this.activeTab = tab;
         this._currentTab = tab;
-        document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-        document.querySelectorAll('.tab-body').forEach(t=>t.classList.remove('active'));
-        document.querySelector(`.tab-body#tab-${tab}`).classList.add('active');
+
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
         const tabs = document.querySelectorAll('.tab');
-        const idx = {route:0,orders:1,customers:2,attribution:3}[tab];
+        const idx = {route:0, orders:1, customers:2, attribution:3}[tab];
         tabs[idx].classList.add('active');
+
+        // Ensure tab bodies are in the right state before rendering
+        if (container) {
+            container.classList.remove('open');
+            container.innerHTML = '';
+            container.style.display = 'none';
+        }
+        this._showActiveTabBody();
+
         this.renderTabFilters();
         this.renderTab();
+
+        // Restore per-tab panel state if this tab had one open
+        const newState = this._panelStates[tab];
+        if (newState && newState.current) {
+            this._skipPanelPush = true;
+            this[newState.current.method](...newState.current.args);
+            this._skipPanelPush = false;
+            requestAnimationFrame(() => {
+                const c = document.getElementById('detail-container');
+                if (c) c.scrollTop = newState.scrollTop || 0;
+            });
+        }
     }
 
     renderTab() {
@@ -880,8 +950,7 @@ class Dashboard {
         const touchpoints = order.fp ? this.raw.filter(r=>r.fp===order.fp) : [];
         touchpoints.sort((a,b)=>this.compareDates(a.dt, b.dt));
 
-        let html = this._panelHeaderHtml();
-        html += `<div class="detail-title">Order #${order.oid}</div>`;
+        let html = `<div class="detail-title">Order #${order.oid}</div>`;
         html += '<div class="cust-card"><h4>Order Details</h4><dl class="cust-grid">';
         html += this.dlRow('Value','$'+(order.pr||0).toFixed(2));
         html += this.dlRow('Status',order.st);
@@ -907,9 +976,8 @@ class Dashboard {
             html += `<div class="detail-sub">Journey Path (${touchpoints.length} touchpoints)</div>`;
             html += this.renderTouchpointTable(order.fp, touchpoints);
         }
-        document.getElementById('detail-content').innerHTML = html;
+        this._openDetailContainer(html);
         makePanelResizable();
-        document.getElementById('overlay').classList.add('open');
     }
 
     // Renders the Customers tab: sortable table with name, order count, journeys, revenue
@@ -1179,8 +1247,7 @@ class Dashboard {
         this._trackPanelView('showJourneyPathsTable', [fp]);
         const touchpoints = [...journey.rows].sort((a,b)=>this.compareDates(a.dt, b.dt));
 
-        let html = this._panelHeaderHtml();
-        html += `<div class="detail-title">Journey Path</div>`;
+        let html = `<div class="detail-title">Journey Path</div>`;
         html += `<div style="color:var(--text-dim); font-size:12px; margin-bottom:4px;">Fingerprint: <a class="xlink" onclick="D.navigateToFingerprint('${fp}')" style="font-size:12px;">${fp}</a></div>`;
         if(journey.custName || journey.custEmail) {
             const custClick = journey.custId ? `D.navigateToCustomer('${journey.custId}')` : '';
@@ -1188,9 +1255,8 @@ class Dashboard {
         }
         html += `<div style="font-size:12px; color:var(--text-dim); margin-bottom:12px;">${journey.count} touchpoints &middot; ${this.fmtDate(journey.firstDate)} → ${this.fmtDate(journey.lastDate)}${journey.revenue ? ' &middot; Revenue: <strong>$'+journey.revenue.toFixed(2)+'</strong>' : ''}</div>`;
         html += this.renderTouchpointTable(fp, touchpoints);
-        document.getElementById('detail-content').innerHTML = html;
+        this._openDetailContainer(html);
         makePanelResizable();
-        document.getElementById('overlay').classList.add('open');
     }
 
     // Side panel: shows all non-empty fields for one specific touchpoint
@@ -1242,8 +1308,7 @@ class Dashboard {
             ? `<span style="background:#fef3c7;color:#92400e;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:700;margin-left:6px;">${hiddenCount} hidden</span>`
             : '';
 
-        let html = this._panelHeaderHtml();
-        html += `<div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;">
+        let html = `<div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;">
             <span class="badge ${typeBadgeClass}">${typeLabel}</span>
             <span style="color:var(--text-dim);font-weight:700;">${this.fmtDate(r.dt)}</span>
         </div>`;
@@ -1252,9 +1317,8 @@ class Dashboard {
             ⚙ Configure visible fields${hiddenBadge}
         </button>`;
 
-        document.getElementById('detail-content').innerHTML = html;
+        this._openDetailContainer(html);
         makePanelResizable();
-        document.getElementById('overlay').classList.add('open');
     }
 
     // Side panel: checkbox grid to show/hide touchpoint fields (saved to localStorage)
@@ -1350,8 +1414,7 @@ class Dashboard {
         </p>
         <div class="tp-cfg-grid">${groupsHtml}</div>`;
 
-        document.getElementById('detail-content').innerHTML = html;
-        document.getElementById('overlay').classList.add('open');
+        this._openDetailContainer(html);
     }
 
     // Toggles one field's visibility and re-renders the configurator
@@ -1465,8 +1528,7 @@ class Dashboard {
         if(!cust) return;
         this._trackPanelView('showCustomer', [cid]);
 
-        let html = this._panelHeaderHtml();
-        html += `<div class="detail-title">${cust.nm}</div>`;
+        let html = `<div class="detail-title">${cust.nm}</div>`;
         // Profile
         html += '<div class="cust-card"><h4>Profile</h4><dl class="cust-grid">';
         html += this.dlRow('Email',cust.em);
@@ -1544,9 +1606,8 @@ class Dashboard {
         html += this._renderCustomerTouchpointsBody(allTp, 'asc');
         html += '</tbody></table></div>';
 
-        document.getElementById('detail-content').innerHTML = html;
+        this._openDetailContainer(html);
         makePanelResizable();
-        document.getElementById('overlay').classList.add('open');
 
         // Orders date sort toggle
         const ordersDateTh = document.getElementById('cust-orders-date-th');
@@ -2102,11 +2163,18 @@ class Dashboard {
         this.showCustomer(cid);
     }
 
-    // Closes the side panel overlay and clears navigation history
+    // Closes the detail panel and restores the active tab body
     closeDetail() {
-        document.getElementById('overlay').classList.remove('open');
-        this._panelHistory = [];
-        this._currentPanelView = null;
+        const container = document.getElementById('detail-container');
+        if (container) {
+            container.classList.remove('open');
+            container.innerHTML = '';
+            container.style.display = 'none';
+        }
+        this._showActiveTabBody();
+        const tab = this._currentTab || 'route';
+        this._panelStates[tab] = { history: [], current: null, scrollTop: 0 };
+        this.renderTab();
     }
 }
 
@@ -2271,9 +2339,10 @@ function makeContainerResizable(containerId) {
     });
 }
 
-// Auto-fits columns + adds resize handles to all tables inside the detail side panel
+// Auto-fits columns + adds resize handles to all tables inside the detail panel
 function makePanelResizable() {
-    const el = document.getElementById('detail-content');
+    const container = document.getElementById('detail-container');
+    const el = container ? container.querySelector('.detail-content') : null;
     if(!el) return;
     requestAnimationFrame(() => {
         requestAnimationFrame(() => {
