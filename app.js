@@ -2180,13 +2180,17 @@ class Dashboard {
 
     _renderStopFingerprints(fps) {
         if (!fps || !fps.length) return '<div style="padding:12px 20px;color:var(--text-dim);font-size:13px;">No matching journeys</div>';
-        let html = '<div style="padding:10px 20px 14px 36px;max-height:340px;overflow-y:auto;">';
-        html += '<table class="tbl"><thead><tr>';
+        let html = '<div style="padding:10px 20px 14px 36px;max-height:360px;overflow-y:auto;">';
+        html += '<table class="tp-table"><thead><tr>';
         html += '<th style="width:40px;">#</th>';
         html += '<th>Fingerprint</th>';
         html += '<th>Customer</th>';
         html += '<th>Source</th>';
+        html += '<th>Ad Campaign</th>';
         html += '<th style="text-align:center;">Touchpoints</th>';
+        html += '<th>Clicks</th>';
+        html += '<th>Actions</th>';
+        html += '<th>Orders</th>';
         html += '<th>Revenue</th>';
         html += '<th>First Seen</th>';
         html += '<th>Last Seen</th>';
@@ -2201,12 +2205,17 @@ class Dashboard {
             const fpShort = fp.length > 16 ? fp.substring(0, 14) + '…' : fp;
             const rev = journey.revenue ? '$' + journey.revenue.toFixed(2) : '—';
             const src = journey.src || '—';
-            html += '<tr onclick="event.stopPropagation();D.showJourneyPathsTable(\'' + fp + '\')">';
+            const cmp = journey.cmp || '—';
+            html += '<tr style="cursor:pointer;" onclick="event.stopPropagation();D.showJourneyPathsTable(\'' + fp + '\')">';
             html += '<td>' + (i + 1) + '</td>';
-            html += '<td><a class="xlink" style="font-family:monospace;font-size:12px;">' + fpShort + '</a></td>';
+            html += '<td><a class="xlink" style="font-family:monospace;font-size:11px;">' + fpShort + '</a></td>';
             html += '<td>' + custLink + '</td>';
             html += '<td>' + src + '</td>';
+            html += '<td>' + cmp + '</td>';
             html += '<td style="text-align:center;">' + journey.count + '</td>';
+            html += '<td style="text-align:center;">' + (journey.clicks ? journey.clicks.length : 0) + '</td>';
+            html += '<td style="text-align:center;">' + (journey.convs ? journey.convs.length : 0) + '</td>';
+            html += '<td style="text-align:center;">' + (journey.orders ? journey.orders.length : 0) + '</td>';
             html += '<td>' + rev + '</td>';
             html += '<td>' + (this.fmtDate(journey.firstDate) || '—') + '</td>';
             html += '<td>' + (this.fmtDate(journey.lastDate) || '—') + '</td>';

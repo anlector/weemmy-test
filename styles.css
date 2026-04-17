@@ -303,6 +303,9 @@ body.col-resizing, body.col-resizing * { cursor:col-resize !important; user-sele
 .stops-row:hover { background:rgba(0,120,146,0.04); }
 .stops-row-expanded { background:rgba(0,120,146,0.04); }
 .stops-expansion-row td { padding:0 !important; background:#f9fafb; }
+.stops-expansion-row .tp-table tbody tr { border-left:none; }
+.stops-expansion-row .tp-table thead th { padding:10px 12px; }
+.stops-expansion-row .tp-table tbody td { padding:12px; }
 
 .stops-bar { display:inline-block; height:14px; border-radius:3px; vertical-align:middle; margin-right:6px; }
 .stops-bar-1 { background:var(--blue-light); border:1px solid var(--blue); opacity:0.7; }
