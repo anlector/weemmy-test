@@ -293,35 +293,170 @@ body.col-resizing, body.col-resizing * { cursor:col-resize !important; user-sele
     .tabs{flex-direction:column;}
 }
 
-/* Attribution tab */
-/* Attribution / Path Stops */
-.btn-attr { padding:5px 14px; border:1px solid #e5e7eb; border-radius:6px; background:#fff; color:var(--text); font-size:13px; font-weight:500; cursor:pointer; transition:all 0.15s; }
-.btn-attr:hover { border-color:var(--brand); color:var(--brand); }
-.btn-attr.active { background:var(--brand); color:#fff; border-color:var(--brand); }
+/* ═══════════════════════════════════════════
+   Attribution / Path Stops tab
+   ═══════════════════════════════════════════ */
 
-.stops-row { cursor:pointer; transition:background 0.1s; }
-.stops-row:hover { background:rgba(0,120,146,0.04); }
-.stops-row-expanded { background:rgba(0,120,146,0.04); }
-.stops-expansion-row td { padding:0 !important; background:#f9fafb; }
-.stops-expansion-row .tp-table tbody tr { border-left:none; }
-.stops-expansion-row .tp-table thead th { padding:10px 12px; }
-.stops-expansion-row .tp-table tbody td { padding:12px; }
+/* Stop 1 toggle (By Source / By Campaign) */
+.btn-attr {
+    padding: 7px 14px;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.btn-attr:hover { border-color: var(--accent); color: var(--accent); }
+.btn-attr.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+}
 
-.stops-bar { display:inline-block; height:14px; border-radius:3px; vertical-align:middle; margin-right:6px; }
-.stops-bar-1 { background:var(--blue-light); border:1px solid var(--blue); opacity:0.7; }
-.stops-bar-2 { background:var(--orange-light); border:1px solid var(--orange); opacity:0.7; }
-.stops-bar-3 { background:var(--green-light); border:1px solid var(--green); opacity:0.7; }
+/* Main stops table — chunky, scannable rows that match the original design */
+#stops-table { background: var(--bg-card); }
+#stops-table thead th {
+    padding: 14px 18px;
+    background: #f9fafb;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    border-bottom: 1px solid #e5e7eb;
+    vertical-align: middle;
+}
+#stops-table tbody td {
+    padding: 16px 18px;
+    font-size: 14px;
+    vertical-align: middle;
+    border-bottom: 1px solid #f0f0f0;
+}
+#stops-table tbody td.stops-name-cell {
+    font-weight: 600;
+    white-space: nowrap;
+}
+#stops-table tbody tr.stops-row { cursor: pointer; transition: background 0.12s; }
+#stops-table tbody tr.stops-row:hover { background: rgba(0,120,146,0.04); }
+#stops-table tbody tr.stops-row-expanded { background: rgba(0,120,146,0.04); }
 
-.stop-header-btn { display:flex; flex-direction:column; align-items:flex-start; }
-.stop-header-cell:hover .stop-header-btn { color:var(--brand); }
+/* Inline bar chart next to counts */
+.stops-bar {
+    display: inline-block;
+    height: 18px;
+    min-width: 6px;
+    border-radius: 3px;
+    vertical-align: middle;
+    margin-right: 10px;
+}
+.stops-bar-1 { background: var(--blue-light); border: 1px solid var(--blue); opacity: 0.75; }
+.stops-bar-2 { background: var(--orange-light); border: 1px solid var(--orange); opacity: 0.75; }
+.stops-bar-3 { background: var(--green-light); border: 1px solid var(--green); opacity: 0.75; }
 
-.stop-popup { min-width:240px; background:#fff; border:1px solid #e5e7eb; border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,0.12); padding:14px; }
-.stop-popup-title { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-dim); margin-bottom:10px; }
-.stop-popup-label { font-size:11px; font-weight:600; color:var(--text-dim); display:block; margin-bottom:4px; }
-.stop-popup-select { width:100%; padding:6px 10px; border:1px solid #e5e7eb; border-radius:6px; font-size:13px; background:#fff; color:var(--text); cursor:pointer; }
-.stop-popup-select:focus { outline:none; border-color:var(--brand); box-shadow:0 0 0 2px rgba(0,120,146,0.12); }
-.stop-popup-clear { margin-top:10px; width:100%; padding:6px 10px; border:1px solid #e5e7eb; border-radius:6px; background:#fff; color:var(--red); font-size:12px; font-weight:500; cursor:pointer; transition:all 0.15s; }
-.stop-popup-clear:hover { background:#fef2f2; border-color:var(--red); }
+/* Stop-configurable column headers (Stop 2, Stop 3) */
+.stop-header-cell {
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s;
+    position: relative;
+}
+.stop-header-cell:hover { background: rgba(0,120,146,0.05); }
+.stop-header-cell .stop-header-btn {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+}
+.stop-header-cell:hover .stop-header-btn { color: var(--accent); }
+.stop-header-cell .stop-header-dim {
+    font-size: 11px; font-weight: 700; color: var(--text);
+    text-transform: uppercase; letter-spacing: 0.5px;
+}
+.stop-header-cell .stop-header-value {
+    font-size: 10px; font-weight: 500; color: var(--text-dim);
+    text-transform: none; letter-spacing: 0;
+    max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.stop-header-cell .stop-header-placeholder {
+    font-size: 11px; font-weight: 600; color: var(--accent);
+    text-transform: none; letter-spacing: 0;
+}
+
+/* Expansion row — drill-down matches detail panel tp-table styling */
+.stops-expansion-row > td {
+    padding: 0 !important;
+    background: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
+}
+.stops-expansion-wrap { padding: 14px 20px 18px; }
+.stops-expansion-row .tp-table {
+    background: var(--bg-card);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    border-radius: 8px;
+    overflow: hidden;
+}
+.stops-expansion-row .tp-table thead th {
+    background: #f9fafb;
+    padding: 10px 14px;
+    font-size: 10px;
+}
+.stops-expansion-row .tp-table tbody td {
+    padding: 10px 14px;
+    font-size: 13px;
+}
+.stops-expansion-row .tp-table tbody tr { border-left: none; cursor: pointer; }
+.stops-expansion-row .tp-table tbody tr:hover { background: #f0f4ff; }
+
+/* Stop popup — portal-positioned config dropdown for Stop 2/3 */
+.stop-popup {
+    min-width: 260px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    padding: 14px;
+}
+.stop-popup-title {
+    font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+}
+.stop-popup-label {
+    font-size: 11px; font-weight: 600;
+    color: var(--text-dim);
+    display: block;
+    margin-bottom: 4px;
+}
+.stop-popup-select {
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    font-size: 13px;
+    background: #fff;
+    color: var(--text);
+    cursor: pointer;
+}
+.stop-popup-select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(0,120,146,0.12);
+}
+.stop-popup-clear {
+    margin-top: 10px;
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    background: #fff;
+    color: var(--red);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.stop-popup-clear:hover { background: #fef2f2; border-color: var(--red); }
 
 /* Funnel toggle button in filter bar */
 .btn-funnel-toggle { font-size:13px; color:#ffffff; cursor:pointer; user-select:none; font-weight:500; padding:7px 16px; border:1px solid rgba(255,255,255,0.5); border-radius:6px; background:rgba(255,255,255,0.08); transition:all 0.2s; white-space:nowrap; align-self:flex-end; margin-left:auto; }

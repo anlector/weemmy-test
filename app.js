@@ -544,6 +544,8 @@ class Dashboard {
         };
         this._stopsSort = { col: 'count', asc: false };
         this._expandedStopRows = new Set();
+        this._stopFpsPages = {};
+        this._stopFpsPageSize = 20;
         this._activeStopPopup = null;
         this._tabFilters = {};
         this._currentTab = 'attribution';
@@ -2105,6 +2107,7 @@ class Dashboard {
     _setStop1Mode(mode) {
         this._stops.stop1.dimKey = mode === 'campaign' ? 'cmp' : 'src';
         this._expandedStopRows.clear();
+        this._stopFpsPages = {};
         this.renderAttribution();
     }
 
@@ -2127,12 +2130,14 @@ class Dashboard {
             this._stops.stop3.value = null;
         }
         this._expandedStopRows.clear();
+        this._stopFpsPages = {};
         this.renderAttribution();
     }
 
     setStopValue(stopNum, value) {
         this._stops['stop' + stopNum].value = value || null;
         this._expandedStopRows.clear();
+        this._stopFpsPages = {};
         this.renderAttribution();
     }
 
@@ -2143,16 +2148,28 @@ class Dashboard {
     }
 
     toggleStopRow(name) {
-        if (this._expandedStopRows.has(name)) this._expandedStopRows.delete(name);
-        else this._expandedStopRows.add(name);
+        if (this._expandedStopRows.has(name)) {
+            this._expandedStopRows.delete(name);
+            delete this._stopFpsPages[name];
+        } else {
+            this._expandedStopRows.add(name);
+        }
+        this.renderAttribution();
+    }
+
+    setStopFpsPage(name, dir) {
+        const current = this._stopFpsPages[name] || 0;
+        this._stopFpsPages[name] = Math.max(0, current + dir);
         this.renderAttribution();
     }
 
     _renderStopPopup(stopNum) {
+        // Popup is only used for Stop 2 and Stop 3 (Stop 1 is driven by the Source/Campaign toggle)
         const stop = this._stops['stop' + stopNum];
         const currentDimKey = stop.dimKey;
         const currentValue = stop.value;
         const borderColor = stopNum === 2 ? 'var(--orange)' : 'var(--green)';
+
         let html = '<div class="stop-popup" onclick="event.stopPropagation()" style="border-top:3px solid ' + borderColor + ';">';
         html += '<div class="stop-popup-title">Configure Stop ' + stopNum + '</div>';
         html += '<label class="stop-popup-label">Dimension</label>';
@@ -2162,6 +2179,7 @@ class Dashboard {
             html += '<option value="' + d.key + '"' + (d.key === currentDimKey ? ' selected' : '') + '>' + d.label + '</option>';
         });
         html += '</select>';
+
         if (currentDimKey) {
             const vals = this._getStopDimValues(currentDimKey);
             html += '<label class="stop-popup-label" style="margin-top:8px;">Value</label>';
@@ -2174,13 +2192,25 @@ class Dashboard {
             html += '</select>';
             html += '<button class="stop-popup-clear" onclick="D.setStopDim(' + stopNum + ', null);D._activeStopPopup=null;">Clear Stop ' + stopNum + '</button>';
         }
+
         html += '</div>';
         return html;
     }
 
-    _renderStopFingerprints(fps) {
-        if (!fps || !fps.length) return '<div style="padding:12px 20px;color:var(--text-dim);font-size:13px;">No matching journeys</div>';
-        let html = '<div style="padding:10px 20px 14px 36px;max-height:360px;overflow-y:auto;">';
+    _renderStopFingerprints(fps, rowName) {
+        if (!fps || !fps.length) {
+            return '<div style="padding:16px;color:var(--text-dim);font-size:13px;">No matching journeys</div>';
+        }
+        const total = fps.length;
+        const pageSize = this._stopFpsPageSize;
+        const totalPages = Math.ceil(total / pageSize);
+        const page = Math.min(this._stopFpsPages[rowName] || 0, Math.max(0, totalPages - 1));
+        this._stopFpsPages[rowName] = page;
+        const pageStart = page * pageSize;
+        const pageEnd = Math.min(pageStart + pageSize, total);
+        const pageFps = fps.slice(pageStart, pageEnd);
+
+        let html = '<div style="overflow-x:auto;">';
         html += '<table class="tp-table"><thead><tr>';
         html += '<th style="width:40px;">#</th>';
         html += '<th>Fingerprint</th>';
@@ -2195,7 +2225,7 @@ class Dashboard {
         html += '<th>First Seen</th>';
         html += '<th>Last Seen</th>';
         html += '</tr></thead><tbody>';
-        fps.forEach((fp, i) => {
+        pageFps.forEach((fp, i) => {
             const journey = this.journeys.find(j => j.fp === fp);
             if (!journey) return;
             const custLabel = journey.custName || journey.custEmail || '—';
@@ -2206,8 +2236,8 @@ class Dashboard {
             const rev = journey.revenue ? '$' + journey.revenue.toFixed(2) : '—';
             const src = journey.src || '—';
             const cmp = journey.cmp || '—';
-            html += '<tr style="cursor:pointer;" onclick="event.stopPropagation();D.showJourneyPathsTable(\'' + fp + '\')">';
-            html += '<td>' + (i + 1) + '</td>';
+            html += '<tr onclick="event.stopPropagation();D.showJourneyPathsTable(\'' + fp + '\')">';
+            html += '<td>' + (pageStart + i + 1) + '</td>';
             html += '<td><a class="xlink" style="font-family:monospace;font-size:11px;">' + fpShort + '</a></td>';
             html += '<td>' + custLink + '</td>';
             html += '<td>' + src + '</td>';
@@ -2217,11 +2247,23 @@ class Dashboard {
             html += '<td style="text-align:center;">' + (journey.convs ? journey.convs.length : 0) + '</td>';
             html += '<td style="text-align:center;">' + (journey.orders ? journey.orders.length : 0) + '</td>';
             html += '<td>' + rev + '</td>';
-            html += '<td>' + (this.fmtDate(journey.firstDate) || '—') + '</td>';
-            html += '<td>' + (this.fmtDate(journey.lastDate) || '—') + '</td>';
+            html += '<td style="white-space:nowrap;">' + (this.fmtDate(journey.firstDate) || '—') + '</td>';
+            html += '<td style="white-space:nowrap;">' + (this.fmtDate(journey.lastDate) || '—') + '</td>';
             html += '</tr>';
         });
         html += '</tbody></table></div>';
+
+        if (totalPages > 1) {
+            const escapedName = rowName.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+            html += '<div class="pager">';
+            html += '<span>Showing ' + (pageStart + 1) + '–' + pageEnd + ' of ' + total + '</span>';
+            html += '<div>';
+            html += '<button onclick="event.stopPropagation();D.setStopFpsPage(\'' + escapedName + '\', -1)"' + (page === 0 ? ' disabled' : '') + '>← Prev</button>';
+            html += '<button onclick="event.stopPropagation();D.setStopFpsPage(\'' + escapedName + '\', 1)" style="margin-left:6px;"' + (page >= totalPages - 1 ? ' disabled' : '') + '>Next →</button>';
+            html += '</div>';
+            html += '</div>';
+        }
+
         return html;
     }
 
@@ -2230,7 +2272,7 @@ class Dashboard {
         if (!container) return;
         container.style.position = 'relative';
 
-        const isSourceMode = this._stops.stop1.dimKey === 'src';
+        const stop1Dim = STOP_DIMENSIONS.find(d => d.key === this._stops.stop1.dimKey) || STOP_DIMENSIONS[0];
         const stop2Dim = this._stops.stop2.dimKey ? STOP_DIMENSIONS.find(d => d.key === this._stops.stop2.dimKey) : null;
         const stop3Dim = this._stops.stop3.dimKey ? STOP_DIMENSIONS.find(d => d.key === this._stops.stop3.dimKey) : null;
         const stop2Active = this._stops.stop2.dimKey && this._stops.stop2.value;
@@ -2252,15 +2294,17 @@ class Dashboard {
         });
 
         const totalJourneys = rows.reduce((s, [, d]) => s + d.count, 0);
-        const arrow = col => this._stopsSort.col === col ? (this._stopsSort.asc ? ' ↑' : ' ↓') : '';
+        const stop1Mode = this._stops.stop1.dimKey === 'cmp' ? 'campaign' : 'source';
 
+        // Header bar — Stop 1 toggle (Source/Campaign) + summary
         let html = '<div style="display:flex;align-items:center;gap:12px;padding:16px 20px 12px;flex-wrap:wrap;">';
         html += '<h3 style="font-size:16px;font-weight:700;margin:0;">Attribution Analysis</h3>';
-        html += '<div style="display:flex;gap:4px;">';
-        html += '<button class="btn-attr' + (isSourceMode ? ' active' : '') + '" onclick="D._setStop1Mode(\'source\')">By Source</button>';
-        html += '<button class="btn-attr' + (!isSourceMode ? ' active' : '') + '" onclick="D._setStop1Mode(\'campaign\')">By Campaign</button>';
+        html += '<div style="display:flex;gap:6px;margin-left:12px;">';
+        html += '<button class="btn-attr' + (stop1Mode === 'source' ? ' active' : '') + '" onclick="D._setStop1Mode(\'source\')">By Source</button>';
+        html += '<button class="btn-attr' + (stop1Mode === 'campaign' ? ' active' : '') + '" onclick="D._setStop1Mode(\'campaign\')">By Campaign</button>';
         html += '</div>';
-        html += '<span style="font-size:12px;color:var(--text-dim);margin-left:auto;">' + totalJourneys + ' journeys across ' + rows.length + ' ' + (isSourceMode ? 'sources' : 'campaigns') + '</span>';
+        html += '<span style="font-size:12px;color:var(--text-dim);margin-left:auto;">'
+             + totalJourneys + ' journeys across ' + rows.length + ' ' + stop1Dim.label.toLowerCase() + 's</span>';
         html += '</div>';
 
         const maxCount = rows.length ? Math.max(...rows.map(([, d]) => d.count)) : 1;
@@ -2268,44 +2312,36 @@ class Dashboard {
         const maxStop3 = rows.length ? Math.max(...rows.map(([, d]) => d.stop3Count), 1) : 1;
 
         const barHtml = (val, max, cls) => {
-            const w = max > 0 ? Math.round((val / max) * 80) : 0;
-            return '<div class="stops-bar ' + cls + '" style="width:' + Math.max(w, 2) + 'px"></div>';
+            const w = max > 0 ? Math.round((val / max) * 100) : 0;
+            return '<div class="stops-bar ' + cls + '" style="width:' + Math.max(w, 4) + 'px"></div>';
         };
 
-        let stop2Label = 'Stop 2', stop2Subtitle = '';
-        if (stop2Active) { stop2Label = stop2Dim.label; stop2Subtitle = this._stops.stop2.value; }
-        let stop3Label = 'Stop 3', stop3Subtitle = '';
-        if (stop3Active) { stop3Label = stop3Dim.label; stop3Subtitle = this._stops.stop3.value; }
+        // Clickable header for Stop 2 / Stop 3 (Stop 1 stays as a plain header)
+        const stopHeader = (num, dim, value, placeholder) => {
+            let inner = '';
+            if (dim) {
+                inner = '<span class="stop-header-dim">' + dim.label + '</span>';
+                if (value) {
+                    const esc = String(value).replace(/"/g, '&quot;');
+                    inner += '<span class="stop-header-value" title="' + esc + '">' + value + '</span>';
+                }
+            } else {
+                inner = '<span class="stop-header-placeholder">' + placeholder + '</span>';
+            }
+            return '<th class="stop-header-cell" data-stop="' + num + '" onclick="D._toggleStopPopup(' + num + ', event)">'
+                 + '<span class="stop-header-btn">' + inner + '</span></th>';
+        };
+
+        const sortArrow = col => sortCol === col ? (sortAsc ? ' ↑' : ' ↓') : '';
 
         html += '<div style="overflow-x:auto;padding:0 20px 20px;">';
         html += '<table class="tbl" id="stops-table"><thead><tr>';
-        html += '<th onclick="D.sortStops(\'name\')" style="cursor:pointer;">' + (isSourceMode ? 'Source' : 'Ad Campaign') + arrow('name') + '</th>';
-        html += '<th onclick="D.sortStops(\'count\')" style="cursor:pointer;">Journeys' + arrow('count') + '</th>';
-
-        html += '<th class="stop-header-cell" data-stop="2" style="cursor:pointer;" onclick="D._toggleStopPopup(2, event)">';
-        html += '<span class="stop-header-btn">';
+        html += '<th onclick="D.sortStops(\'name\')" style="cursor:pointer;">' + stop1Dim.label + sortArrow('name') + '</th>';
+        html += '<th onclick="D.sortStops(\'count\')" style="cursor:pointer;">Journeys' + sortArrow('count') + '</th>';
+        html += stopHeader(2, stop2Dim, stop2Active ? this._stops.stop2.value : null, '+ STOP 2');
         if (stop2Active) {
-            html += stop2Label + arrow('stop2Count');
-            html += '<div style="font-size:10px;font-weight:400;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;" title="' + stop2Subtitle.replace(/"/g, '&quot;') + '">' + stop2Subtitle + '</div>';
-        } else {
-            html += '<span style="color:var(--text-dim);font-weight:500;">+ Stop 2</span>';
+            html += stopHeader(3, stop3Dim, stop3Active ? this._stops.stop3.value : null, '+ STOP 3');
         }
-        html += '</span>';
-        html += '</th>';
-
-        if (stop2Active) {
-            html += '<th class="stop-header-cell" data-stop="3" style="cursor:pointer;" onclick="D._toggleStopPopup(3, event)">';
-            html += '<span class="stop-header-btn">';
-            if (stop3Active) {
-                html += stop3Label + arrow('stop3Count');
-                html += '<div style="font-size:10px;font-weight:400;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;" title="' + stop3Subtitle.replace(/"/g, '&quot;') + '">' + stop3Subtitle + '</div>';
-            } else {
-                html += '<span style="color:var(--text-dim);font-weight:500;">+ Stop 3</span>';
-            }
-            html += '</span>';
-            html += '</th>';
-        }
-
         html += '</tr></thead><tbody>';
 
         rows.forEach(([name, d]) => {
@@ -2315,21 +2351,19 @@ class Dashboard {
             const escapedName = name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
             html += '<tr class="stops-row ' + rowClass + '" onclick="D.toggleStopRow(\'' + escapedName + '\')">';
-            html += '<td style="font-weight:600;white-space:nowrap;"><span style="color:var(--text-dim);font-size:12px;display:inline-block;width:14px;">' + expandIcon + '</span> ' + name + '</td>';
-            html += '<td>' + barHtml(d.count, maxCount, 'stops-bar-1') + ' ' + d.count + '</td>';
-            html += '<td>' + (stop2Active ? barHtml(d.stop2Count, maxStop2, 'stops-bar-2') + ' ' + d.stop2Count : '<span style="color:#d1d5db;">—</span>') + '</td>';
+            html += '<td class="stops-name-cell"><span style="color:var(--text-dim);font-size:12px;display:inline-block;width:14px;">' + expandIcon + '</span> ' + name + '</td>';
+            html += '<td>' + barHtml(d.count, maxCount, 'stops-bar-1') + '<strong>' + d.count + '</strong></td>';
+            html += '<td>' + (stop2Active ? barHtml(d.stop2Count, maxStop2, 'stops-bar-2') + '<strong>' + d.stop2Count + '</strong>' : '<span style="color:#d1d5db;">—</span>') + '</td>';
             if (stop2Active) {
-                html += '<td>' + (stop3Active ? barHtml(d.stop3Count, maxStop3, 'stops-bar-3') + ' ' + d.stop3Count : '<span style="color:#d1d5db;">—</span>') + '</td>';
+                html += '<td>' + (stop3Active ? barHtml(d.stop3Count, maxStop3, 'stops-bar-3') + '<strong>' + d.stop3Count + '</strong>' : '<span style="color:#d1d5db;">—</span>') + '</td>';
             }
             html += '</tr>';
 
             if (isExpanded) {
                 const colSpan = 3 + (stop2Active ? 1 : 0);
-                const activeFps = stop3Active ? d.stop3Fps
-                                : stop2Active ? d.stop2Fps
-                                : d.fps;
+                const activeFps = stop3Active ? d.stop3Fps : stop2Active ? d.stop2Fps : d.fps;
                 html += '<tr class="stops-expansion-row"><td colspan="' + colSpan + '">';
-                html += this._renderStopFingerprints(activeFps);
+                html += '<div class="stops-expansion-wrap">' + this._renderStopFingerprints(activeFps, name) + '</div>';
                 html += '</td></tr>';
             }
         });
@@ -2338,6 +2372,7 @@ class Dashboard {
         html += '<div id="stop-popup-portal"></div>';
         container.innerHTML = html;
 
+        // Column resize / auto-fit — main table AND drill-down tables
         const table = document.getElementById('stops-table');
         if (table) {
             requestAnimationFrame(() => {
@@ -2345,22 +2380,26 @@ class Dashboard {
                     autoFitColumns(table);
                     makeResizable(table);
                     addColumnHighlight(table);
+                    container.querySelectorAll('.stops-expansion-row table.tp-table').forEach(t => {
+                        autoFitColumns(t);
+                        makeResizable(t);
+                        addColumnHighlight(t);
+                    });
                 });
             });
         }
 
-        if (this._activeStopPopup) {
+        // Render an open stop popup in the portal (Stop 2 or Stop 3 only)
+        if (this._activeStopPopup && this._activeStopPopup !== 1) {
             const portalEl = document.getElementById('stop-popup-portal');
             const headerCell = document.querySelector('.stop-header-cell[data-stop="' + this._activeStopPopup + '"]');
             if (portalEl && headerCell) {
                 const rect = headerCell.getBoundingClientRect();
                 const containerRect = container.getBoundingClientRect();
-                const leftPos = rect.left - containerRect.left;
-                const topPos = rect.bottom - containerRect.top + 4;
                 portalEl.innerHTML = this._renderStopPopup(this._activeStopPopup);
                 portalEl.style.position = 'absolute';
-                portalEl.style.left = leftPos + 'px';
-                portalEl.style.top = topPos + 'px';
+                portalEl.style.left = (rect.left - containerRect.left) + 'px';
+                portalEl.style.top = (rect.bottom - containerRect.top + 4) + 'px';
                 portalEl.style.zIndex = '200';
             }
         }
@@ -2763,6 +2802,7 @@ window.D = {
     setStopValue: () => {},
     sortStops: () => {},
     toggleStopRow: () => {},
+    setStopFpsPage: () => {},
     _setStop1Mode: () => {},
     _toggleStopPopup: () => {},
     _activeStopPopup: null,
