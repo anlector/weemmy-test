@@ -3,89 +3,118 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Customer Journey Dashboard · Weem</title>
+<title>WEEM · Customer Journey Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1" integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="datepicker.css">
+<script defer src="datepicker.js"></script>
 <script defer src="app.js"></script>
 </head>
 <body>
-<div class="dash">
+<div class="app">
     <div id="data-status" class="data-status" style="display:none;"></div>
-    <!-- MANAGEMENT PANEL -->
-    <div class="mgmt">
-        <div class="mgmt-title">Customer Journey Dashboard <span>WEEM Analytics</span></div>
 
-        <div class="filters">
-            <div class="f-group"><label>From</label><input type="date" id="f-from" onchange="D.markFiltersPending()"></div>
-            <div class="f-group"><label>To</label><input type="date" id="f-to" onchange="D.markFiltersPending()"></div>
-            <div class="f-group"><label>Search</label><input type="text" id="f-search" placeholder="Name, email, fingerprint, order ID..." oninput="D.markFiltersPending()"></div>
-            <button class="btn-clear" onclick="D.clearFilters()">Clear Filters</button>
-            <button class="btn-apply" id="btn-apply-filters" onclick="D.applyFilters()">Apply Filters</button>
-            <button class="btn-funnel-toggle" id="funnel-toggle-btn" onclick="D.toggleFunnelPanel()">Show Conversion Funnel</button>
+    <!-- Hidden inputs hold the YYYY-MM-DD range consumed by D.filter() / D.markFiltersPending() -->
+    <input type="hidden" id="f-from" value="">
+    <input type="hidden" id="f-to" value="">
+
+    <!-- HEADER (teal bar with brand, date range, search, theme toggle, user chip) -->
+    <header class="mgmt">
+        <div class="brand">
+            <div class="brand-logo">W</div>
+            <div>WEEM <span class="brand-sub">Customer Journey</span></div>
+        </div>
+        <div class="mgmt-fields">
+            <div class="mgmt-field" id="dr-trigger-slot"></div>
+            <div class="mgmt-field" style="flex:1;">
+                <label>Search</label>
+                <input class="mgmt-input search" id="f-search" placeholder="email, IP, fingerprint, order ID…" oninput="D.markFiltersPending()">
+            </div>
+        </div>
+        <div class="mgmt-actions">
+            <button class="btn btn-ghost-inverse" id="funnel-toggle-btn" onclick="D.toggleFunnelPanel()" style="height:32px;">▸ Show Conversion Funnel</button>
+            <button class="theme-toggle" data-action="toggle-theme" title="Toggle dark mode" aria-label="Toggle dark mode">
+                <svg class="theme-icon theme-icon-light" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="4"/>
+                    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+                </svg>
+                <svg class="theme-icon theme-icon-dark" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/>
+                </svg>
+            </button>
+            <div class="user-chip">
+                <div class="avatar">AN</div>
+                Andrii
+            </div>
+        </div>
+    </header>
+
+    <!-- TABS -->
+    <div class="tabs-wrap">
+        <button class="tab active" onclick="D.switchTab('attribution')" data-tab="attribution">
+            Path Stops <span class="count tab-count" id="tc-attribution"></span>
+        </button>
+        <button class="tab" onclick="D.switchTab('route')" data-tab="route">
+            Journey Paths <span class="count tab-count" id="tc-route"></span>
+        </button>
+        <button class="tab" onclick="D.switchTab('orders')" data-tab="orders">
+            Orders <span class="count tab-count" id="tc-orders"></span>
+        </button>
+        <button class="tab" onclick="D.switchTab('customers')" data-tab="customers">
+            Customers <span class="count tab-count" id="tc-customers"></span>
+        </button>
+    </div>
+
+    <!-- PER-TAB FILTERS (level 2) -->
+    <div class="filter-bar" id="tab-filters">
+        <div id="tab-filters-rows"></div>
+        <div class="filter-actions-row">
+            <button class="btn btn-primary btn-apply" id="btn-apply-filters" onclick="D.applyFilters()">Apply filters</button>
+            <button class="btn btn-ghost btn-clear" onclick="D.clearFilters()">Clear</button>
+            <button class="btn btn-ghost dashed btn-add-filter" onclick="D.addTabFilter()">+ Add filter</button>
+            <span class="filter-hint">AND logic. Apply to update the list.</span>
         </div>
     </div>
 
     <!-- CONVERSION FUNNEL -->
-    <div class="funnel-panel" id="funnel-panel" style="display:none">
-        <div class="funnel-header">
-            <span class="funnel-title">Conversion Funnel</span>
-            <span class="funnel-summary" id="funnel-summary"></span>
+    <div class="funnel" id="funnel-panel" style="display:none">
+        <div class="funnel-head">
+            <div class="funnel-title">Conversion funnel</div>
+            <div class="funnel-summary" id="funnel-summary"></div>
         </div>
-        <div class="funnel-body" id="funnel-body">
-            <div class="funnel-bar" id="funnel-bar"></div>
+        <div id="funnel-body">
+            <div id="funnel-bar"></div>
         </div>
     </div>
 
-    <!-- TABS -->
-    <div class="tabs">
-        <div class="tab" onclick="D.switchTab('route')">Journey Paths<span class="tab-count" id="tc-route"></span></div>
-        <div class="tab" onclick="D.switchTab('orders')">Orders<span class="tab-count" id="tc-orders"></span></div>
-        <div class="tab" onclick="D.switchTab('customers')">Customers<span class="tab-count" id="tc-customers"></span></div>
-        <div class="tab active" onclick="D.switchTab('attribution')">Attribution</div>
-    </div>
-
-    <!-- PER-TAB FILTERS (Level 2) -->
-    <div class="tab-filters" id="tab-filters">
-        <div class="tab-filters-rows" id="tab-filters-rows"></div>
-        <button class="btn-add-filter" onclick="D.addTabFilter()">+ Add Filter</button>
-    </div>
-
-    <!-- DETAIL PANEL (full-width, below tabs) -->
-    <div id="detail-container" class="detail-container"></div>
-
-    <!-- JOURNEY PATHS TAB -->
-    <div class="tab-body" id="tab-route">
-        <div class="card">
-            <div class="card-hdr"><h3>Journey Paths</h3></div>
-            <div id="route-table" style="overflow-x:auto;"></div>
+    <!-- TAB BODIES -->
+    <div class="dash">
+        <div class="tab-body" id="tab-route">
+            <div id="route-table"></div>
             <div class="pager" id="route-pager"></div>
         </div>
-    </div>
 
-    <!-- ORDERS TAB -->
-    <div class="tab-body" id="tab-orders">
-        <div class="card">
-            <div class="card-hdr"><h3>Orders</h3></div>
+        <div class="tab-body" id="tab-orders">
             <div id="orders-table"></div>
             <div class="pager" id="orders-pager"></div>
         </div>
-    </div>
 
-
-    <!-- CUSTOMERS TAB -->
-    <div class="tab-body" id="tab-customers">
-        <div class="card">
-            <div class="card-hdr"><h3>Customers</h3></div>
+        <div class="tab-body" id="tab-customers">
             <div id="customers-table"></div>
             <div class="pager" id="customers-pager"></div>
         </div>
-    </div>
 
-    <!-- PATH STOPS TAB -->
-    <div class="tab-body active" id="tab-attribution"></div>
+        <div class="tab-body active" id="tab-attribution"></div>
+    </div>
 </div>
 
+<div id="backdrop"></div>
+<div id="detail-container"></div>
+<div id="stop-popup-portal"></div>
 
 </body>
 </html>

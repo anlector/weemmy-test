@@ -570,7 +570,7 @@ class Dashboard {
         }
         this.init();
         document.addEventListener('click', (e) => {
-            if (this._activeStopPopup && !e.target.closest('.stop-popup') && !e.target.closest('.stop-header-btn') && !e.target.closest('#stop-popup-portal') && !e.target.closest('.stop-col')) {
+            if (this._activeStopPopup && !e.target.closest('.stop-popup') && !e.target.closest('.stop-header-btn') && !e.target.closest('#stop-popup-portal') && !e.target.closest('.stop-header-cell')) {
                 this._activeStopPopup = null;
                 if (this._currentTab === 'attribution') this.renderAttribution();
             }
@@ -618,20 +618,12 @@ class Dashboard {
         return this._panelStates[tab];
     }
 
-    // Pick the current scroll container — v2 uses `.panel-body`, legacy uses `.detail-content`,
-    // and if neither exists we fall back to the outer `#detail-container`.
-    _panelScroller() {
-        const container = document.getElementById('detail-container');
-        if (!container) return null;
-        return container.querySelector('.panel-body') || container.querySelector('.detail-content') || container;
-    }
-
     _pushPanelState(method, args) {
-        const el = this._panelScroller();
+        const container = document.getElementById('detail-container');
         this._panelState().history.push({
             method,
             args,
-            scrollTop: el ? el.scrollTop : 0
+            scrollTop: container ? container.scrollTop : 0
         });
     }
 
@@ -655,38 +647,11 @@ class Dashboard {
     }
 
     _openDetailContainer(html) {
-        this._updateDrawerTop();
         const container = document.getElementById('detail-container');
         container.innerHTML = `${this._panelHeaderHtml()}<div class="detail-content">${html}</div>`;
         container.classList.add('open');
-        const bd = document.getElementById('backdrop');
-        if (bd) bd.classList.add('open');
-        document.body.classList.add('no-scroll');
-        // Detail drawer is now a bottom slide-up overlay — keep tab content in place underneath.
-    }
-
-    // v2 panel controls: close on the left, then a back arrow when history exists.
-    // Returned as raw HTML so view methods can inline it into their panel-head.
-    _panelControlsV2() {
-        const history = this._panelState().history;
-        const close = `<button class="icon-btn" onclick="D.closeDetail()" title="Close" aria-label="Close">×</button>`;
-        const back = history.length > 0
-            ? `<button class="icon-btn" onclick="D.panelGoBack()" title="Back" aria-label="Back" style="margin-left:4px;">←</button>`
-            : '';
-        return close + back;
-    }
-
-    // v2 open: emits `.panel-head` + `.panel-body` directly (no legacy wrappers).
-    // `head` and `body` are HTML strings; use `_panelControlsV2()` to get close/back buttons.
-    _openPanel({ head, body }) {
-        this._updateDrawerTop();
-        const container = document.getElementById('detail-container');
-        if (!container) return;
-        container.innerHTML = `<div class="panel-head">${head}</div><div class="panel-body">${body}</div>`;
-        container.classList.add('open');
-        const bd = document.getElementById('backdrop');
-        if (bd) bd.classList.add('open');
-        document.body.classList.add('no-scroll');
+        this._hideActiveTabBody();
+        window.scrollTo({ top: 0, behavior: 'instant' });
     }
 
     _hideActiveTabBody() {
@@ -716,8 +681,8 @@ class Dashboard {
         this[prev.method](...prev.args);
         this._skipPanelPush = false;
         requestAnimationFrame(() => {
-            const el = this._panelScroller();
-            if (el) el.scrollTop = prev.scrollTop;
+            const container = document.getElementById('detail-container');
+            if (container) container.scrollTop = prev.scrollTop;
         });
     }
 
@@ -731,183 +696,8 @@ class Dashboard {
     }
 
     init() {
-        this.applyTheme();
-        this.bindThemeToggle();
-        this.initDateRange();
-        this.renderDateRangeTrigger();
-        this.bindDateRangeTrigger();
-        this.bindBackdrop();
-        this.bindDrawerTopTracker();
         this.renderTabFilters();
         this.applyFilters();
-    }
-
-    // ========== Drawer top-edge tracking ==========
-    // The bottom detail drawer opens from the bottom of the viewport up to
-    // the bottom edge of `.tabs-wrap` (header + tabs row). We expose that
-    // pixel offset to CSS via `--drawer-top` so #detail-container and
-    // #backdrop can anchor themselves below the tabs. Recomputed on resize,
-    // theme change, and whenever the tabs row's own box changes (fonts,
-    // responsive breakpoints, etc.).
-    _updateDrawerTop() {
-        const tabs = document.querySelector('.tabs-wrap');
-        if (!tabs) return;
-        const rect = tabs.getBoundingClientRect();
-        // rect.bottom is relative to the viewport, which is what `position:
-        // fixed; top: …` uses — exactly the anchor we want.
-        const px = Math.max(0, Math.round(rect.bottom));
-        document.documentElement.style.setProperty('--drawer-top', `${px}px`);
-    }
-
-    bindDrawerTopTracker() {
-        if (this._drawerTopBound) return;
-        this._drawerTopBound = true;
-        this._updateDrawerTop();
-        // Initial paint hasn't necessarily finished on first call during
-        // init(); queue a second measurement after the browser has laid out
-        // the tabs row with its final font metrics.
-        requestAnimationFrame(() => this._updateDrawerTop());
-
-        window.addEventListener('resize', () => this._updateDrawerTop());
-
-        const tabs = document.querySelector('.tabs-wrap');
-        if (tabs && typeof ResizeObserver !== 'undefined') {
-            const ro = new ResizeObserver(() => this._updateDrawerTop());
-            ro.observe(tabs);
-            // Also watch the header — its height can change when the date
-            // picker expands below the field on narrow viewports.
-            const header = document.querySelector('header.mgmt');
-            if (header) ro.observe(header);
-        }
-    }
-
-    // ========== Theme (Phase 5) ==========
-    applyTheme() {
-        const saved = localStorage.getItem('weem.theme') || 'light';
-        document.documentElement.setAttribute('data-theme', saved === 'dark' ? 'dark' : 'light');
-    }
-
-    bindThemeToggle() {
-        const btn = document.querySelector('[data-action="toggle-theme"]');
-        if (!btn || btn._bound) return;
-        btn._bound = true;
-        btn.addEventListener('click', () => {
-            const cur = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
-            const next = cur === 'dark' ? 'light' : 'dark';
-            document.documentElement.setAttribute('data-theme', next);
-            localStorage.setItem('weem.theme', next);
-        });
-    }
-
-    // ========== Date range trigger (Phase 4) ==========
-    // Seed #f-from / #f-to with an initial window (full data range) so the pill
-    // has something to show on first render and the existing D.filter() pipeline works.
-    initDateRange() {
-        const fromInput = document.getElementById('f-from');
-        const toInput = document.getElementById('f-to');
-        if (!fromInput || !toInput) return;
-
-        // If the user already picked a range in a previous session, use it.
-        const savedFrom = localStorage.getItem('weem.dateFrom');
-        const savedTo = localStorage.getItem('weem.dateTo');
-        if (savedFrom) fromInput.value = savedFrom;
-        if (savedTo) toInput.value = savedTo;
-
-        // Otherwise infer a sensible default from the dataset itself.
-        if (!fromInput.value || !toInput.value) {
-            const dates = (this.raw || []).map(r => this.parseDate(r.dt)).filter(Boolean);
-            if (dates.length) {
-                dates.sort((a, b) => a - b);
-                const toISO = d => {
-                    const y = d.getFullYear();
-                    const m = String(d.getMonth() + 1).padStart(2, '0');
-                    const dd = String(d.getDate()).padStart(2, '0');
-                    return `${y}-${m}-${dd}`;
-                };
-                if (!fromInput.value) fromInput.value = toISO(dates[0]);
-                if (!toInput.value) toInput.value = toISO(dates[dates.length - 1]);
-            }
-        }
-    }
-
-    formatDateShort(d) {
-        if (!d) return '—';
-        const dt = d instanceof Date ? d : this.parseDate(d);
-        if (!dt || isNaN(dt)) return String(d || '—');
-        const mm = String(dt.getMonth() + 1).padStart(2, '0');
-        const dd = String(dt.getDate()).padStart(2, '0');
-        const yy = dt.getFullYear();
-        return `${mm}/${dd}/${yy}`;
-    }
-
-    renderDateRangeTrigger() {
-        const slot = document.getElementById('dr-trigger-slot');
-        if (!slot) return;
-        const fromRaw = (document.getElementById('f-from') || {}).value || '';
-        const toRaw = (document.getElementById('f-to') || {}).value || '';
-        const fromLabel = fromRaw ? this.formatDateShort(fromRaw) : 'Select…';
-        const toLabel = toRaw ? this.formatDateShort(toRaw) : 'Select…';
-
-        const icon = `<svg class="dr-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5 L13.5 6.5 M5 2 L5 5 M11 2 L11 5"/></svg>`;
-        const caret = `<svg class="dr-caret" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 4 L5 7 L8 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-
-        slot.innerHTML = `
-            <label>Date range</label>
-            <button type="button" class="dr-pill" id="dr-trigger-pill">
-                ${icon}
-                <span>${fromLabel}</span>
-                <span class="dr-sep">→</span>
-                <span>${toLabel}</span>
-                ${caret}
-            </button>`;
-    }
-
-    bindDateRangeTrigger() {
-        const pill = document.getElementById('dr-trigger-pill');
-        if (!pill || pill._bound) return;
-        pill._bound = true;
-
-        pill.addEventListener('click', () => {
-            if (!window.WeemDatePicker) return;
-            const fromInput = document.getElementById('f-from');
-            const toInput = document.getElementById('f-to');
-
-            const fromD = fromInput && fromInput.value ? this.parseDate(fromInput.value) : null;
-            const toD = toInput && toInput.value ? this.parseDate(toInput.value) : null;
-
-            pill.classList.add('open');
-            window.WeemDatePicker.open({
-                anchor: pill,
-                from: fromD || new Date(),
-                to: toD || fromD || new Date(),
-                focus: 'from',
-                onApply: (f, t) => {
-                    const toISO = d => {
-                        const y = d.getFullYear();
-                        const m = String(d.getMonth() + 1).padStart(2, '0');
-                        const dd = String(d.getDate()).padStart(2, '0');
-                        return `${y}-${m}-${dd}`;
-                    };
-                    if (fromInput) fromInput.value = toISO(f);
-                    if (toInput) toInput.value = toISO(t);
-                    localStorage.setItem('weem.dateFrom', fromInput.value);
-                    localStorage.setItem('weem.dateTo', toInput.value);
-                    this.renderDateRangeTrigger();
-                    this.bindDateRangeTrigger();
-                    this.markFiltersPending();
-                    this.applyFilters();
-                },
-                onClose: () => pill.classList.remove('open'),
-            });
-        });
-    }
-
-    // ========== Backdrop click-to-close (Phase 11 wiring) ==========
-    bindBackdrop() {
-        const bd = document.getElementById('backdrop');
-        if (!bd || bd._bound) return;
-        bd._bound = true;
-        bd.addEventListener('click', () => this.closeDetail());
     }
 
     // Resets all filter inputs (global + per-tab) to default and auto-applies
@@ -1149,25 +939,22 @@ class Dashboard {
         const panelIsOpen = container && container.classList.contains('open');
 
         if (panelIsOpen) {
-            const scroller = this._panelScroller();
-            this._panelStates[prevTab].scrollTop = scroller ? scroller.scrollTop : 0;
+            this._panelStates[prevTab].scrollTop = container.scrollTop || 0;
         }
 
         this.activeTab = tab;
         this._currentTab = tab;
 
         document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        const activeBtn = document.querySelector('.tab[data-tab="' + tab + '"]');
-        if (activeBtn) activeBtn.classList.add('active');
+        const tabs = document.querySelectorAll('.tab');
+        const idx = {route:0, orders:1, customers:2, attribution:3}[tab];
+        tabs[idx].classList.add('active');
 
         // Ensure tab bodies are in the right state before rendering
         if (container) {
             container.classList.remove('open');
             container.innerHTML = '';
         }
-        const bd = document.getElementById('backdrop');
-        if (bd) bd.classList.remove('open');
-        document.body.classList.remove('no-scroll');
         this._showActiveTabBody();
 
         this.renderTabFilters();
@@ -1180,8 +967,8 @@ class Dashboard {
             this[newState.current.method](...newState.current.args);
             this._skipPanelPush = false;
             requestAnimationFrame(() => {
-                const el = this._panelScroller();
-                if (el) el.scrollTop = newState.scrollTop || 0;
+                const c = document.getElementById('detail-container');
+                if (c) c.scrollTop = newState.scrollTop || 0;
             });
         }
     }
@@ -1191,105 +978,49 @@ class Dashboard {
         else if(this.activeTab==='route') this.renderRoute();
         else if(this.activeTab==='attribution') this.renderAttribution();
         else this.renderCustomers();
-        // After the active tab renders any native <select>s, restyle them.
-        this.enhanceSelects();
     }
 
     // Renders the Orders tab: sortable table with order ID, date, value, status, customer, fingerprint
     renderOrders() {
         let data = [...(this.filteredOrders || this.fOrders)];
         const s = this.sortState.orders;
-        if (s) data.sort((a, b) => {
-            const av = a[s.f] || '', bv = b[s.f] || '';
-            const c = typeof av === 'number' ? av - bv : String(av).localeCompare(String(bv));
-            return s.d === 'asc' ? c : -c;
-        });
+        if(s) data.sort((a,b) => { const av=a[s.f]||'',bv=b[s.f]||''; const c=typeof av==='number'?av-bv:String(av).localeCompare(String(bv)); return s.d==='asc'?c:-c; });
         const start = this.pages.orders * this.pageSize;
-        const page = data.slice(start, start + this.pageSize);
+        const page = data.slice(start, start+this.pageSize);
         const total = data.length;
-        const esc = this._escHtml.bind(this);
 
+        let html = '<table class="tbl"><thead><tr>';
         const cols = [
-            { f: 'dt',   l: 'Date' },
-            { f: 'oid',  l: 'Order ID' },
-            { f: 'nm',   l: 'Customer' },
-            { f: 'fsrc', l: 'Source' },
-            { f: 'rcmp', l: 'Ref. Campaign' },
-            { f: 'app',  l: 'App' },
-            { f: 'co',   l: 'State' },
-            { f: 'pr',   l: 'Value' },
-            { f: 'st',   l: 'Status' },
-            { f: 'fp',   l: 'Fingerprint' },
+            {f:'oid',l:'Order ID'},{f:'dt',l:'Date'},{f:'pr',l:'Value'},{f:'st',l:'Status'},
+            {f:'app',l:'App'},{f:'nm',l:'Customer'},{f:'fp',l:'Fingerprint'},{f:'rcmp',l:'Ref. Campaign'},{f:'fsrc',l:'First Source'}
         ];
-
-        let html = `<div class="sort-bar">
-            <span class="results"><b>${total}</b> order${total === 1 ? '' : 's'}</span>
-        </div>
-        <table class="tbl"><thead><tr>`;
         cols.forEach(c => {
-            const sorted = s && s.f === c.f;
-            const cls = 'sortable' + (sorted ? (s.d === 'asc' ? ' sorted sort-asc' : ' sorted sort-desc') : '');
-            html += `<th class="${cls}" onclick="D.sortCol('orders','${c.f}')">${esc(c.l)}</th>`;
+            const cls = s&&s.f===c.f ? (s.d==='asc'?'sort-asc':'sort-desc') : '';
+            html += `<th class="${cls}" onclick="D.sortCol('orders','${c.f}')">${c.l}</th>`;
         });
-        html += `</tr></thead><tbody>`;
-
+        html += '</tr></thead><tbody>';
         page.forEach(r => {
+            const stBadge = r.st==='FULFILLED'?'badge-green':r.st==='PENDING'?'badge-orange':'badge-grey';
             const isSub = this.isSubscription(r);
+            const subBadge = isSub ? ' <span class="badge badge-subscription">Subscription</span>' : '';
             const rowClass = isSub ? 'subscription-row' : '';
-
-            const src = r.fsrc || r.src || '';
-            const srcCell = src
-                ? `<span class="src-chip"><span class="src-dot ${this.canonicalizeSource(src)}"></span>${esc(src)}</span>`
-                : '<span class="dim">—</span>';
-
-            const appCell = isSub
-                ? '<span class="badge subscription">SUB</span>'
-                : (r.app ? esc(r.app) : '<span class="dim">—</span>');
-
-            let stBadge = '<span class="dim">—</span>';
-            if (r.st) {
-                const up = String(r.st).toUpperCase();
-                const variant = up === 'FULFILLED' ? 'purchase' : up === 'PENDING' ? 'action' : 'subscription';
-                stBadge = `<span class="badge ${variant}">${esc(r.st)}</span>`;
-            }
-
-            const custName = r.nm || '';
-            let custCell;
-            if (custName) {
-                const nameHtml = r.cid
-                    ? `<a class="xlink" onclick="event.stopPropagation();D.navigateToCustomer('${esc(r.cid)}')">${esc(custName)}</a>`
-                    : esc(custName);
-                const emailHtml = r.em ? `<br><small class="dim">${esc(r.em)}</small>` : '';
-                custCell = nameHtml + emailHtml;
-            } else if (r.em) {
-                custCell = `<small class="dim">${esc(r.em)}</small>`;
-            } else {
-                custCell = '<span class="dim">—</span>';
-            }
-
-            const fpCell = r.fp
-                ? `<a class="xlink mono" onclick="event.stopPropagation();D.navigateToFingerprint('${esc(r.fp)}')" title="${esc(r.fp)}">${esc(r.fp)}</a>`
-                : '<span class="dim">—</span>';
-
-            const oidCell = r.oid
-                ? `<a class="xlink mono" onclick="event.stopPropagation();D.showOrder('${esc(r.oid)}')">${esc(r.oid)}</a>`
-                : '<span class="dim">—</span>';
-
-            html += `<tr class="${rowClass}" onclick="D.showOrder('${esc(r.oid || '')}')" style="cursor:pointer;">
-                <td class="mono dim">${esc(this.fmtDate(r.dt))}</td>
-                <td>${oidCell}</td>
+            const custCell = r.cid
+                ? `<a class="xlink" onclick="event.stopPropagation();D.navigateToCustomer('${r.cid}')">${r.nm||''}</a>${r.em?'<br><small style="color:var(--text-dim)">'+r.em+'</small>':''}`
+                : `${r.nm||''}${r.em?'<br><small style="color:var(--text-dim)">'+r.em+'</small>':''}`;
+            const fpCell = r.fp ? `<a class="xlink" onclick="event.stopPropagation();D.navigateToFingerprint('${r.fp}')" style="font-family:monospace;font-size:12px;">${r.fp}</a>` : '';
+            html += `<tr class="${rowClass}" onclick="D.showOrder('${r.oid}')">
+                <td>${r.oid||''}</td>
+                <td>${this.fmtDate(r.dt)}</td>
+                <td><strong>$${(r.pr||0).toFixed(2)}</strong></td>
+                <td><span class="badge ${stBadge}">${r.st||'N/A'}</span></td>
+                <td>${(r.app||'')}${subBadge}</td>
                 <td>${custCell}</td>
-                <td>${srcCell}</td>
-                <td>${r.rcmp ? esc(r.rcmp) : '<span class="dim">—</span>'}</td>
-                <td>${appCell}</td>
-                <td>${r.co ? esc(r.co) : '<span class="dim">—</span>'}</td>
-                <td class="mono" style="color:var(--green);font-weight:700;">$${(r.pr || 0).toFixed(2)}</td>
-                <td>${stBadge}</td>
                 <td>${fpCell}</td>
+                <td>${r.rcmp||''}</td>
+                <td>${r.fsrc||''}</td>
             </tr>`;
         });
-
-        html += `</tbody></table>`;
+        html += '</tbody></table>';
         document.getElementById('orders-table').innerHTML = html;
         makeContainerResizable('orders-table');
         this.renderPager('orders', total);
@@ -1341,80 +1072,42 @@ class Dashboard {
     renderCustomers() {
         let data = [...(this.filteredCustomers || this.customers)];
         const s = this.sortState.customers;
-        if (s) data.sort((a, b) => {
-            const av = a[s.f] || '', bv = b[s.f] || '';
-            const c = typeof av === 'number' ? av - bv : String(av).localeCompare(String(bv));
-            return s.d === 'asc' ? c : -c;
-        });
+        if(s) data.sort((a,b) => { const av=a[s.f]||'',bv=b[s.f]||''; const c=typeof av==='number'?av-bv:String(av).localeCompare(String(bv)); return s.d==='asc'?c:-c; });
         const start = this.pages.customers * this.pageSize;
-        const page = data.slice(start, start + this.pageSize);
-        const total = data.length;
-        const esc = this._escHtml.bind(this);
+        const page = data.slice(start, start+this.pageSize);
 
+        let html = '<table class="tbl"><thead><tr>';
         const cols = [
-            { f: 'nm',          l: 'Customer',     sortable: true  },
-            { f: 'em',          l: 'Email',        sortable: false },
-            { f: 'cid',         l: 'Customer ID',  sortable: false },
-            { f: 'fpCount',     l: 'Fingerprints', sortable: true  },
-            { f: 'orderCount',  l: 'Orders',       sortable: true  },
-            { f: 'touchpoints', l: 'Touchpoints',  sortable: true  },
-            { f: 'revenue',     l: 'Revenue',      sortable: true  },
-            { f: 'firstSeen',   l: 'First Seen',   sortable: true  },
-            { f: 'lastSeen',    l: 'Last Seen',    sortable: true  },
+            {f:'nm',l:'Customer'},{f:'orderCount',l:'Orders'},{f:'fpCount',l:'Journeys'},
+            {f:'touchpoints',l:'Touchpoints'},{f:'revenue',l:'Revenue'},{f:'firstSeen',l:'First Seen'},{f:'lastSeen',l:'Last Seen'}
         ];
-
-        let html = `<div class="sort-bar">
-            <span class="results"><b>${total}</b> customer${total === 1 ? '' : 's'}</span>
-        </div>
-        <table class="tbl"><thead><tr>`;
         cols.forEach(c => {
-            if (!c.sortable) {
-                html += `<th>${esc(c.l)}</th>`;
-                return;
-            }
-            const sorted = s && s.f === c.f;
-            const cls = 'sortable' + (sorted ? (s.d === 'asc' ? ' sorted sort-asc' : ' sorted sort-desc') : '');
-            html += `<th class="${cls}" onclick="D.sortCol('customers','${c.f}')">${esc(c.l)}</th>`;
+            const cls = s&&s.f===c.f ? (s.d==='asc'?'sort-asc':'sort-desc') : '';
+            html += `<th class="${cls}" onclick="D.sortCol('customers','${c.f}')">${c.l}</th>`;
         });
-        html += `</tr></thead><tbody>`;
-
+        html += '</tr></thead><tbody>';
         page.forEach(c => {
-            const name = c.nm || c.em || '—';
-            const initials = String(name)
-                .split(/\s+/)
-                .map(p => p[0])
-                .filter(Boolean)
-                .slice(0, 2)
-                .join('')
-                .toUpperCase() || '?';
-            const nameCell = `
-                <span class="cust-avatar" style="display:inline-grid;width:24px;height:24px;font-size:10px;vertical-align:middle;margin-right:8px;">${esc(initials)}</span>
-                <a class="xlink" onclick="event.stopPropagation();D.showCustomer('${esc(c.cid)}')">${esc(name)}</a>`;
-
-            html += `<tr onclick="D.showCustomer('${esc(c.cid)}')" style="cursor:pointer;">
-                <td>${nameCell}</td>
-                <td class="dim">${c.em ? esc(c.em) : '<span class="dim">—</span>'}</td>
-                <td class="mono dim">${c.cid ? esc(c.cid) : '<span class="dim">—</span>'}</td>
-                <td>${c.fpCount || 0}</td>
-                <td>${c.orderCount || 0}</td>
-                <td>${c.touchpoints || 0}</td>
-                <td class="mono" style="color:var(--green);font-weight:700;">$${(c.revenue || 0).toFixed(2)}</td>
-                <td class="mono dim">${esc(this.fmtDate(c.firstSeen))}</td>
-                <td class="mono dim">${esc(this.fmtDate(c.lastSeen))}</td>
+            html += `<tr onclick="D.showCustomer('${c.cid}')">
+                <td>${c.nm}${c.em?'<br><small style="color:var(--text-dim)">'+c.em+'</small>':''}</td>
+                <td><strong>${c.orderCount}</strong></td>
+                <td>${c.fpCount}</td>
+                <td>${c.touchpoints}</td>
+                <td><strong>$${c.revenue.toFixed(2)}</strong></td>
+                <td>${this.fmtDate(c.firstSeen)}</td>
+                <td>${this.fmtDate(c.lastSeen)}</td>
             </tr>`;
         });
-
-        html += `</tbody></table>`;
+        html += '</tbody></table>';
         document.getElementById('customers-table').innerHTML = html;
         makeContainerResizable('customers-table');
-        this.renderPager('customers', total);
+        this.renderPager('customers', data.length);
     }
 
     // Renders the Journey Paths tab: each row = one fingerprint with horizontal touchpoint cards
     renderRoute() {
         let data = [...(this.filteredJourneys || this.journeys)];
         const rs = this.routeSort || { field: 'lastDate', dir: 'desc' };
-        data.sort((a, b) => {
+        data.sort((a,b) => {
             const av = a[rs.field] ?? '';
             const bv = b[rs.field] ?? '';
             const c = typeof av === 'number' ? av - bv : String(av).localeCompare(String(bv));
@@ -1422,175 +1115,154 @@ class Dashboard {
         });
         const start = this.pages.route * this.pageSize;
         const page = data.slice(start, start + this.pageSize);
-        const esc = this._escHtml.bind(this);
+
+        const tr = (s, n) => { if(!s) return ''; const v=String(s); return v.length<=n?v:v.slice(0,n-1)+'…'; };
+        const kv = (label, val) => val ? `<div class="route-cell-kv"><span class="kv-label">${label}</span><span class="kv-val">${val}</span></div>` : '';
 
         const sortSel = rs.field;
         const sortDir = rs.dir;
 
-        // v2 sort-bar
-        let html = `<div class="sort-bar">
-            <span class="results"><b>${data.length}</b> journey path${data.length === 1 ? '' : 's'}</span>
-            <span class="sep"></span>
-            <span>Sort by:</span>
-            <select class="filter-select" id="route-sort-field" onchange="D.setRouteSort(this.value)">
-                <option value="lastDate" ${sortSel==='lastDate'?'selected':''}>Last seen</option>
-                <option value="firstDate" ${sortSel==='firstDate'?'selected':''}>First seen</option>
+        let html = `<div class="route-sort-bar">
+            <label>Sort by</label>
+            <select id="route-sort-field" onchange="D.setRouteSort(this.value)">
+                <option value="lastDate" ${sortSel==='lastDate'?'selected':''}>Latest activity</option>
+                <option value="firstDate" ${sortSel==='firstDate'?'selected':''}>First activity</option>
                 <option value="count" ${sortSel==='count'?'selected':''}>Touchpoint count</option>
                 <option value="revenue" ${sortSel==='revenue'?'selected':''}>Revenue</option>
                 <option value="custName" ${sortSel==='custName'?'selected':''}>Customer name</option>
             </select>
-            <button class="icon-btn" onclick="D.toggleRouteSortDir()" title="Toggle sort direction" aria-label="Toggle sort direction">${sortDir==='desc'?'↓':'↑'}</button>
-        </div>
-        <div class="jp-list">`;
+            <button onclick="D.toggleRouteSortDir()">${sortDir==='desc'?'↓ Desc':'↑ Asc'}</button>
+        </div>`;
 
         page.forEach((j, idx) => {
-            const rowNum = start + idx + 1;
-            const touchpoints = [...j.rows].sort((a, b) => this.compareDates(a.dt, b.dt));
+            const touchpoints = [...j.rows].sort((a,b)=>this.compareDates(a.dt, b.dt));
             const visible = touchpoints.slice(0, 20);
             const more = touchpoints.length - visible.length;
 
-            // Time-to-first-purchase badge
+            const rowNum = start + idx + 1;
+            const dateRange = `${this.fmtShortDate(j.firstDate)} → ${this.fmtShortDate(j.lastDate)}`;
+
+            let custHtml = '';
+            if(j.custName || j.custEmail) {
+                const custLabel = j.custName || j.custEmail;
+                const custClick = j.custId
+                    ? `event.stopPropagation();D.navigateToCustomer('${j.custId}')`
+                    : '';
+                custHtml = `<div class="route-customer"><a onclick="${custClick}" title="${j.custEmail||''}">${tr(custLabel,22)}</a></div>`;
+                if(j.custEmail && j.custName) {
+                    custHtml += `<div class="route-meta" style="margin-top:1px;">${tr(j.custEmail,24)}</div>`;
+                }
+            }
+
             let ttfpHtml = '';
             if (j.firstOrderTs && j.firstDate) {
                 const firstTpTime = this.parseDate(j.firstDate);
                 if (firstTpTime) {
                     const diffMs = j.firstOrderTs - firstTpTime.getTime();
                     if (diffMs >= 0) {
-                        const label = this._formatDurationShort(diffMs);
-                        if (label) ttfpHtml = `<div class="jp-time-badge">⏱ ${esc(label)} to 1st purchase</div>`;
+                        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                        const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                        const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                        let ttfpLabel = '';
+                        if (diffDays > 0) ttfpLabel = `${diffDays}d ${diffHours}h`;
+                        else if (diffHours > 0) ttfpLabel = `${diffHours}h ${diffMins}m`;
+                        else ttfpLabel = `${diffMins}m`;
+                        ttfpHtml = `<div class="route-meta" style="color:#92400e;">⏱ ${ttfpLabel} to 1st purchase</div>`;
                     }
                 }
             }
 
-            // Customer block (prospect fallback when no customer)
-            const hasCust = !!(j.custName || j.custEmail || j.custId);
-            let custHtml;
-            if (hasCust) {
-                const nameText = j.custName || j.custEmail || '';
-                const nameAttrs = j.custId
-                    ? ` onclick="event.stopPropagation();D.navigateToCustomer('${j.custId}')"`
-                    : '';
-                custHtml = `<div class="jp-cust">
-                    <div class="jp-cust-name"${nameAttrs}>${esc(nameText)}</div>
-                    ${j.custEmail && j.custEmail !== nameText ? `<div class="jp-cust-email">${esc(j.custEmail)}</div>` : ''}
-                </div>`;
-            } else {
-                custHtml = `<div class="jp-cust"><div class="dim" style="font-size:11px;">prospect · unattributed</div></div>`;
-            }
-
-            const fpSvg = `<svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 2.5c0-.8.9-1.5 3-1.5s3 .7 3 1.5M3 5c0-.8 1.6-2 5-2s5 1.2 5 2c0 1.2-.8 2.2-2 2.8M5 7c0-.6.8-1 3-1s3 .4 3 1c0 1.5-1 3-3 4.5M8 14.5c0-1 .5-2 1-3"/></svg>`;
-
-            const leftHtml = `<div class="jp-left" onclick="D.showJourneyPathsTable('${j.fp}')">
-                <div class="jp-idx">
-                    <span class="jp-num">#${String(rowNum).padStart(3,'0')}</span>
-                    <span class="jp-count">${j.count} tp</span>
+            html += `<div class="route-row">
+                <div class="route-fp" onclick="D.showJourneyPathsTable('${j.fp}')">
+                    <div style="font-weight:800; font-size:14px;">#${rowNum}</div>
+                    <div class="route-meta">${j.count} touchpoints</div>
+                    <div class="route-meta">${dateRange}</div>
+                    ${j.revenue ? `<div class="route-meta" style="font-weight:700;color:var(--green);">$${j.revenue.toFixed(2)}</div>` : ''}
+                    ${ttfpHtml}
+                    ${custHtml}
                 </div>
-                <div class="jp-fp-id" title="Click to open journey path details">
-                    ${fpSvg}
-                    <span class="mono">${esc(j.fp)}</span>
-                </div>
-                <div class="jp-range" title="${esc(this.fmtDate(j.firstDate))} → ${esc(this.fmtDate(j.lastDate))}">
-                    ${esc(this.fmtShortDate(j.firstDate))}<br>→ ${esc(this.fmtShortDate(j.lastDate))}
-                </div>
-                ${j.revenue > 0
-                    ? `<div class="jp-rev">$${j.revenue.toFixed(2)}</div>`
-                    : '<div class="dim" style="font-size:11px;margin-top:4px;">no revenue</div>'}
-                ${custHtml}
-                ${ttfpHtml}
-            </div>`;
+                <div class="route-cells">`;
 
-            // Card track — insert .tp-divider before the first post-purchase card
-            let cardsHtml = '';
-            let dividerPlaced = false;
+            let insertedDivider = false;
             visible.forEach((r, tpIndex) => {
+                const isSub = this.isSubscription(r);
+                const type = r.t === 'c' ? 'click' : r.t === 'v' ? 'conv' : 'order';
+                const typeLabel = r.t === 'c' ? 'CLICK' : r.t === 'v' ? 'ACTION' : (isSub ? 'SUBSCRIPTION' : 'PURCHASE');
                 const phase = this.classifyTouchpoint(r, j.firstOrderTs);
-                if (!dividerPlaced && (phase === 'first' || phase === 'post')) {
-                    cardsHtml += `<div class="tp-divider"></div>`;
-                    dividerPlaced = true;
+
+                if (!insertedDivider && (phase === 'first' || phase === 'post')) {
+                    html += `<div style="display:flex;align-items:center;min-width:40px;flex-shrink:0;">
+                        <div style="width:2px;height:100%;min-height:60px;background:linear-gradient(180deg, transparent, #f59e0b, transparent);margin:0 auto;"></div>
+                    </div>`;
+                    insertedDivider = true;
                 }
-                cardsHtml += this._renderTpCard(r, phase, j.fp, tpIndex);
+
+                const purchaseBadge = (r.t === 'o' && phase === 'first')
+                    ? '<span class="first-purchase-badge">★ 1st</span>'
+                    : '';
+
+                let cardBody = '';
+                if(r.t === 'c') {
+                    cardBody += kv('Source', r.src);
+                    cardBody += kv('Ad Campaign', tr(r.cmp,28));
+                    cardBody += kv('Ad Group', tr(r.adg||r.s1,24));
+                    cardBody += kv('Placement', tr(r.plc||r.s2,24));
+                    cardBody += kv('Creative', tr(r.s4,24));
+                } else if(r.t === 'v') {
+                    cardBody += kv('Type', r.vt);
+                    cardBody += kv('Source', r.src);
+                    cardBody += kv('Ad Campaign', tr(r.cmp,28));
+                    const payout = (r.pay!=null && r.pay!=='') ? `$${Number(r.pay).toFixed(2)}` : '';
+                    cardBody += kv('Payout', payout);
+                    cardBody += kv('Creative', tr(r.s4,24));
+                } else {
+                    const stBadge = r.st==='FULFILLED'?'badge-green':r.st==='PENDING'?'badge-orange':'badge-grey';
+                    const value = (r.pr!=null && r.pr!=='') ? `$${Number(r.pr).toFixed(2)}` : '';
+                    const oidLink = r.oid ? `<a class="xlink" onclick="event.stopPropagation();D.navigateToOrder('${r.oid}')">#${r.oid}</a>` : '';
+                    cardBody += `<div class="route-cell-kv">${oidLink}</div>`;
+                    cardBody += kv('Value', value);
+                    cardBody += `<div class="route-cell-kv"><span class="badge ${stBadge}">${r.st||'N/A'}</span></div>`;
+                    if(r.cmp) cardBody += kv('Ad Campaign', tr(r.cmp,28));
+                    if(r.rcmp) cardBody += kv('Ref. Campaign', tr(r.rcmp,28));
+                    if(r.nm) {
+                        const custClick = r.cid ? `event.stopPropagation();D.navigateToCustomer('${r.cid}')` : '';
+                        cardBody += `<div class="route-cell-kv"><span class="kv-label">Customer</span><a class="xlink" onclick="${custClick}">${tr(r.nm,20)}</a></div>`;
+                    }
+                }
+
+                const devParts = [r.dev, r.os].filter(Boolean);
+                const locParts = [r.ci, r.co].filter(Boolean);
+                let contextChips = '';
+                if(devParts.length || locParts.length || r.br) {
+                    contextChips = '<div class="route-cell-context">';
+                    if(devParts.length) contextChips += `<span>${devParts.join(' · ')}</span>`;
+                    if(r.br) contextChips += `<span>${r.br}</span>`;
+                    if(locParts.length) contextChips += `<span>${locParts.join(', ')}</span>`;
+                    contextChips += '</div>';
+                }
+
+                const subCls = isSub ? ' subscription' : '';
+                const phaseClass = phase === 'first' ? ' first-purchase' : phase === 'pre' ? ' pre-purchase' : '';
+                const subActCls = this.isSubscriptionAction(r) ? ' sub-action' : '';
+                const onclick = `event.stopPropagation();D.showTouchpoint('${j.fp}',${tpIndex})`;
+                html += `<div class="route-cell ${type}${subCls}${phaseClass}${subActCls}" onclick="${onclick}">
+                    <div class="route-cell-type ${type}${subCls}">${typeLabel}${purchaseBadge}</div>
+                    ${cardBody}
+                    ${contextChips}
+                    <div class="route-cell-date">${this.fmtDate(r.dt)}</div>
+                </div>`;
             });
-            if (more > 0) {
-                cardsHtml += `<div class="tp-card tp-card-more" onclick="event.stopPropagation();D.expandRouteRow('${j.fp}')" title="Show remaining touchpoints" style="min-width:110px;max-width:130px;display:flex;align-items:center;justify-content:center;color:var(--ink-3);font-weight:700;font-size:12px;background:var(--surface-2);border-style:dashed;">+${more} more</div>`;
+
+            if(more > 0) {
+                html += `<div class="route-cell route-cell-more" onclick="event.stopPropagation();D.expandRouteRow('${j.fp}')">+${more} more</div>`;
             }
 
-            html += `<div class="jp-row" data-fp="${esc(j.fp)}">
-                ${leftHtml}
-                <div class="tp-track">${cardsHtml}</div>
-            </div>`;
+            html += `</div></div>`;
         });
 
-        html += `</div>`;
-        if (!page.length) html = '<div style="padding:16px 20px; color:var(--ink-3);">No journeys match current filters.</div>';
+        if(!page.length) html = '<div style="padding:16px 20px; color:var(--text-dim);">No journeys match current filters.</div>';
         document.getElementById('route-table').innerHTML = html;
         this.renderPager('route', data.length);
-    }
-
-    // Shared tp-card renderer used by renderRoute() and expandRouteRow()
-    _renderTpCard(r, phase, fp, tpIndex) {
-        const esc = this._escHtml.bind(this);
-        const isSub = this.isSubscription(r);
-        const muted = this.isSubscriptionAction(r);
-
-        const classes = ['tp-card'];
-        if (r.t === 'c')      classes.push('click');
-        else if (r.t === 'v') classes.push('action');
-        else                  classes.push(isSub ? 'subscription' : 'purchase');
-        if (phase === 'first') classes.push('first');
-        if (phase === 'pre')   classes.push('pre');
-        if (muted)             classes.push('muted');
-
-        let badge;
-        if (r.t === 'c')      badge = '<span class="badge click">CLICK</span>';
-        else if (r.t === 'v') badge = '<span class="badge action">ACTION</span>';
-        else                  badge = isSub
-            ? '<span class="badge subscription">SUB</span>'
-            : '<span class="badge purchase">PURCHASE</span>';
-        const firstBadge = (r.t === 'o' && phase === 'first')
-            ? '<span class="badge first">★ 1st</span>'
-            : '';
-
-        const srcRow = (v) => v
-            ? `<div class="tp-row-data"><span class="k">Src</span><span class="v" title="${esc(v)}"><span class="src-dot ${this.canonicalizeSource(v)}"></span> ${esc(v)}</span></div>`
-            : '';
-
-        let rows = '';
-        if (r.t === 'c') {
-            rows += srcRow(r.src);
-            if (r.cmp)             rows += `<div class="tp-row-data"><span class="k">Cmp</span><span class="v" title="${esc(r.cmp)}">${esc(r.cmp)}</span></div>`;
-            if (r.s4)              rows += `<div class="tp-row-data"><span class="k">Creat.</span><span class="v mono" title="${esc(r.s4)}">${esc(r.s4)}</span></div>`;
-            const plc = r.plc || r.s2;
-            if (plc)               rows += `<div class="tp-row-data"><span class="k">Place</span><span class="v" title="${esc(plc)}">${esc(plc)}</span></div>`;
-        } else if (r.t === 'v') {
-            if (r.vt)              rows += `<div class="tp-row-data"><span class="k">Type</span><span class="v" style="color:var(--orange);font-weight:700;">${esc(r.vt)}</span></div>`;
-            rows += srcRow(r.src);
-            if (r.cmp)             rows += `<div class="tp-row-data"><span class="k">Cmp</span><span class="v" title="${esc(r.cmp)}">${esc(r.cmp)}</span></div>`;
-            if (r.pay != null && r.pay !== '') {
-                rows += `<div class="tp-row-data"><span class="k">Payout</span><span class="v price">$${Number(r.pay).toFixed(2)}</span></div>`;
-            }
-        } else {
-            if (r.oid) {
-                rows += `<div class="tp-row-data"><span class="k">Order</span><span class="v link mono" onclick="event.stopPropagation();D.navigateToOrder('${r.oid}')">#${esc(r.oid)}</span></div>`;
-            }
-            if (r.pr != null && r.pr !== '') {
-                rows += `<div class="tp-row-data"><span class="k">Value</span><span class="v price">$${Number(r.pr).toFixed(2)}</span></div>`;
-            }
-            if (r.st) {
-                rows += `<div class="tp-row-data"><span class="k">Status</span><span class="v"><span class="status">${esc(r.st)}</span></span></div>`;
-            }
-            if (r.rcmp) {
-                rows += `<div class="tp-row-data"><span class="k">Ref.</span><span class="v" title="${esc(r.rcmp)}">${esc(r.rcmp)}</span></div>`;
-            }
-        }
-
-        return `<div class="${classes.join(' ')}" data-tp-fp="${esc(fp)}" data-tp-idx="${tpIndex}" onclick="event.stopPropagation();D.showTouchpoint('${fp}',${tpIndex})" title="Click to open touchpoint details">
-            <div class="tp-head">
-                ${badge}
-                ${firstBadge}
-                <span class="tp-time">${esc(this.fmtDate(r.dt))}</span>
-            </div>
-            ${rows}
-        </div>`;
     }
 
     // Expands all hidden touchpoints for a journey row when "+N more" is clicked
@@ -1602,29 +1274,99 @@ class Dashboard {
         const hidden = touchpoints.slice(20);
         if (!hidden.length) return;
 
-        // Locate the tp-track and "+N more" element for this fingerprint
-        const row = document.querySelector(`.jp-row[data-fp="${CSS.escape(fp)}"]`);
-        if (!row) return;
-        const track = row.querySelector('.tp-track');
-        const moreEl = track ? track.querySelector('.tp-card-more') : null;
-        if (!track || !moreEl) return;
+        // Locate the "+N more" element inside the correct row
+        let targetCells = null;
+        let moreEl = null;
+        const rows = document.querySelectorAll('.route-row');
+        for (const row of rows) {
+            const fpEl = row.querySelector('.route-fp');
+            if (fpEl && fpEl.getAttribute('onclick') && fpEl.getAttribute('onclick').includes(fp)) {
+                targetCells = row.querySelector('.route-cells');
+                moreEl = targetCells ? targetCells.querySelector('.route-cell-more') : null;
+                break;
+            }
+        }
+        if (!targetCells || !moreEl) return;
 
-        // Divider may already have been placed among the first 20 cards
+        const tr = (s, n) => { if (!s) return ''; return s.length > n ? s.substring(0, n) + '…' : s; };
+        const kv = (label, val) => val ? `<div class="route-cell-kv"><span class="kv-label">${label}</span> ${val}</div>` : '';
+
         const visible = touchpoints.slice(0, 20);
-        let dividerPlaced = visible.some(r => {
+        const alreadyHadDivider = visible.some(r => {
             const ph = this.classifyTouchpoint(r, journey.firstOrderTs);
             return ph === 'first' || ph === 'post';
         });
+        let insertedDivider = alreadyHadDivider;
 
         let newHtml = '';
         hidden.forEach((r, i) => {
             const tpIndex = 20 + i;
+            const isSub = this.isSubscription(r);
+            const type = r.t === 'c' ? 'click' : r.t === 'v' ? 'conv' : 'order';
+            const typeLabel = r.t === 'c' ? 'CLICK' : r.t === 'v' ? 'ACTION' : (isSub ? 'SUBSCRIPTION' : 'PURCHASE');
             const phase = this.classifyTouchpoint(r, journey.firstOrderTs);
-            if (!dividerPlaced && (phase === 'first' || phase === 'post')) {
-                newHtml += `<div class="tp-divider"></div>`;
-                dividerPlaced = true;
+
+            if (!insertedDivider && (phase === 'first' || phase === 'post')) {
+                newHtml += `<div style="display:flex;align-items:center;min-width:40px;flex-shrink:0;">
+                    <div style="width:2px;height:100%;min-height:60px;background:linear-gradient(180deg, transparent, #f59e0b, transparent);margin:0 auto;"></div>
+                </div>`;
+                insertedDivider = true;
             }
-            newHtml += this._renderTpCard(r, phase, fp, tpIndex);
+
+            const purchaseBadge = (r.t === 'o' && phase === 'first')
+                ? '<span class="first-purchase-badge">★ 1st</span>'
+                : '';
+
+            let cardBody = '';
+            if (r.t === 'c') {
+                cardBody += kv('Source', r.src);
+                cardBody += kv('Ad Campaign', tr(r.cmp, 28));
+                cardBody += kv('Ad Group', tr(r.adg || r.s1, 24));
+                cardBody += kv('Placement', tr(r.plc || r.s2, 24));
+                cardBody += kv('Creative', tr(r.s4, 24));
+            } else if (r.t === 'v') {
+                cardBody += kv('Type', r.vt);
+                cardBody += kv('Source', r.src);
+                cardBody += kv('Ad Campaign', tr(r.cmp, 28));
+                const payout = (r.pay != null && r.pay !== '') ? `$${Number(r.pay).toFixed(2)}` : '';
+                cardBody += kv('Payout', payout);
+                cardBody += kv('Creative', tr(r.s4, 24));
+            } else {
+                const stBadge = r.st === 'FULFILLED' ? 'badge-green' : r.st === 'PENDING' ? 'badge-orange' : 'badge-grey';
+                const value = (r.pr != null && r.pr !== '') ? `$${Number(r.pr).toFixed(2)}` : '';
+                const oidLink = r.oid ? `<a class="xlink" onclick="event.stopPropagation();D.navigateToOrder('${r.oid}')">#${r.oid}</a>` : '';
+                cardBody += `<div class="route-cell-kv">${oidLink}</div>`;
+                cardBody += kv('Value', value);
+                cardBody += `<div class="route-cell-kv"><span class="badge ${stBadge}">${r.st || 'N/A'}</span></div>`;
+                if (r.cmp) cardBody += kv('Ad Campaign', tr(r.cmp, 28));
+                if (r.rcmp) cardBody += kv('Ref. Campaign', tr(r.rcmp, 28));
+                if (r.nm) {
+                    const custClick = r.cid ? `event.stopPropagation();D.navigateToCustomer('${r.cid}')` : '';
+                    cardBody += `<div class="route-cell-kv"><span class="kv-label">Customer</span><a class="xlink" onclick="${custClick}">${tr(r.nm, 20)}</a></div>`;
+                }
+            }
+
+            const devParts = [r.dev, r.os].filter(Boolean);
+            const locParts = [r.ci, r.co].filter(Boolean);
+            let contextChips = '';
+            if (devParts.length || locParts.length || r.br) {
+                contextChips = '<div class="route-cell-context">';
+                if (devParts.length) contextChips += `<span>${devParts.join(' · ')}</span>`;
+                if (r.br) contextChips += `<span>${r.br}</span>`;
+                if (locParts.length) contextChips += `<span>${locParts.join(', ')}</span>`;
+                contextChips += '</div>';
+            }
+
+            const subCls = isSub ? ' subscription' : '';
+            const phaseClass = phase === 'first' ? ' first-purchase' : phase === 'pre' ? ' pre-purchase' : '';
+            const subActCls = this.isSubscriptionAction(r) ? ' sub-action' : '';
+            const onclick = `event.stopPropagation();D.showTouchpoint('${fp}',${tpIndex})`;
+            newHtml += `<div class="route-cell ${type}${subCls}${phaseClass}${subActCls}" onclick="${onclick}">
+                <div class="route-cell-type ${type}${subCls}">${typeLabel}${purchaseBadge}</div>
+                ${cardBody}
+                ${contextChips}
+                <div class="route-cell-date">${this.fmtDate(r.dt)}</div>
+            </div>`;
         });
 
         moreEl.insertAdjacentHTML('beforebegin', newHtml);
@@ -1649,247 +1391,83 @@ class Dashboard {
 
     // Side panel: full touchpoint table for one fingerprint (all clicks, conversions, orders)
     showJourneyPathsTable(fp) {
-        const journey = this.journeys.find(j => j.fp === fp);
-        if (!journey) return;
+        const journey = this.journeys.find(j=>j.fp===fp);
+        if(!journey) return;
         this._trackPanelView('showJourneyPathsTable', [fp]);
-        const touchpoints = [...journey.rows].sort((a, b) => this.compareDates(a.dt, b.dt));
-        const esc = this._escHtml.bind(this);
+        const touchpoints = [...journey.rows].sort((a,b)=>this.compareDates(a.dt, b.dt));
 
-        // Subtitle: prefer "Source · City, State", fall back to whatever we have.
-        const first = touchpoints[0] || {};
-        const subtitleBits = [];
-        if (journey.src) subtitleBits.push(esc(journey.src));
-        const loc = [first.ci, first.co].filter(Boolean).join(', ');
-        if (loc) subtitleBits.push(esc(loc));
-        const subtitle = subtitleBits.join(' · ');
-
-        const clickCt = (journey.clicks || []).length;
-        const convCt  = (journey.convs  || []).length;
-        const orderCt = (journey.orders || []).length;
-
-        // Time to first: from the journey's first touch to its first order.
-        const firstTs = this.parseDate(journey.firstDate);
-        const ttfp = (firstTs && journey.firstOrderTs && journey.firstOrderTs > firstTs.getTime())
-            ? this._formatDurationShort(journey.firstOrderTs - firstTs.getTime())
-            : null;
-
-        // ─── panel-head ─────────────────────────────────────────────────
-        const head = `
-            ${this._panelControlsV2()}
-            <div class="panel-title">
-                Journey Path
-                <span class="pid">${esc(fp)}</span>
-                ${subtitle ? `<span class="panel-subtitle">${subtitle}</span>` : ''}
-            </div>
-            <div class="panel-meta">
-                <div class="stat"><b>${journey.count}</b><span>Touchpoints</span></div>
-                <div class="stat"><b>${clickCt}</b><span>Clicks</span></div>
-                <div class="stat"><b>${convCt}</b><span>Actions</span></div>
-                <div class="stat"><b>${orderCt}</b><span>Orders</span></div>
-                ${journey.revenue > 0 ? `<div class="stat"><b style="color:var(--green)">$${journey.revenue.toFixed(2)}</b><span>Revenue</span></div>` : ''}
-            </div>`;
-
-        // ─── panel-body ─────────────────────────────────────────────────
-        let body = '';
-        if (journey.custId || journey.custName || journey.custEmail) {
-            const custName = journey.custName || journey.custEmail || '—';
-            const initials = String(custName)
-                .split(/\s+/)
-                .map(p => p[0])
-                .filter(Boolean)
-                .slice(0, 2)
-                .join('')
-                .toUpperCase() || '?';
-            const nameCell = journey.custId
-                ? `<a class="xlink" onclick="D.navigateToCustomer('${journey.custId}')">${esc(custName)}</a>`
-                : esc(custName);
-
-            body += `
-                <div class="cust-card">
-                    <div class="cust-avatar">${esc(initials)}</div>
-                    <div class="cust-info">
-                        <div class="name">${nameCell}</div>
-                        ${journey.custEmail ? `<div class="email">${esc(journey.custEmail)}</div>` : ''}
-                        ${journey.custId    ? `<div class="cid">Customer ID · ${esc(journey.custId)}</div>` : ''}
-                    </div>
-                    <div class="cust-kpis">
-                        ${ttfp ? `<div class="kpi-box"><div class="v teal">${esc(ttfp)}</div><div class="l">Time to 1st</div></div>` : ''}
-                        ${journey.revenue > 0 ? `<div class="kpi-box"><div class="v green">$${journey.revenue.toFixed(2)}</div><div class="l">Revenue</div></div>` : ''}
-                        <div class="kpi-box"><div class="v">${journey.count}</div><div class="l">Touchpoints</div></div>
-                    </div>
-                </div>`;
+        let html = `<div class="detail-title">Journey Path</div>`;
+        html += `<div style="color:var(--text-dim); font-size:12px; margin-bottom:4px;">Fingerprint: <a class="xlink" onclick="D.navigateToFingerprint('${fp}')" style="font-size:12px;">${fp}</a></div>`;
+        if(journey.custName || journey.custEmail) {
+            const custClick = journey.custId ? `D.navigateToCustomer('${journey.custId}')` : '';
+            html += `<div style="font-size:12px; margin-bottom:4px;">Customer: <a class="xlink" onclick="${custClick}">${journey.custName||journey.custEmail}</a></div>`;
         }
-
-        body += `
-            <div>
-                <div class="section-head">
-                    <h3>All Touchpoints</h3>
-                    <span class="muted">Chronological · ${journey.count} records${journey.firstDate && journey.lastDate ? ` · ${esc(this.fmtDate(journey.firstDate))} → ${esc(this.fmtDate(journey.lastDate))}` : ''}</span>
-                </div>
-                ${this.renderTouchpointTable(fp, touchpoints, journey.firstOrderTs)}
-            </div>`;
-
-        this._openPanel({ head, body });
+        html += `<div style="font-size:12px; color:var(--text-dim); margin-bottom:12px;">${journey.count} touchpoints &middot; ${this.fmtDate(journey.firstDate)} → ${this.fmtDate(journey.lastDate)}${journey.revenue ? ' &middot; Revenue: <strong>$'+journey.revenue.toFixed(2)+'</strong>' : ''}</div>`;
+        html += this.renderTouchpointTable(fp, touchpoints, journey.firstOrderTs);
+        this._openDetailContainer(html);
         makePanelResizable();
-    }
-
-    // Compact human-readable duration ("2d 4h", "3h 12m", "45m", "30s")
-    _formatDurationShort(ms) {
-        if (!ms || ms < 0) return '';
-        const s = Math.round(ms / 1000);
-        if (s < 60) return `${s}s`;
-        const m = Math.round(s / 60);
-        if (m < 60) return `${m}m`;
-        const h = Math.floor(m / 60);
-        const mm = m % 60;
-        if (h < 24) return mm ? `${h}h ${mm}m` : `${h}h`;
-        const d = Math.floor(h / 24);
-        const hh = h % 24;
-        return hh ? `${d}d ${hh}h` : `${d}d`;
     }
 
     // Side panel: shows all non-empty fields for one specific touchpoint
     showTouchpoint(fp, index) {
-        const journey = this.journeys.find(j => j.fp === fp);
-        if (!journey) return;
-        const touchpoints = [...journey.rows].sort((a, b) => this.compareDates(a.dt, b.dt));
+        const journey = this.journeys.find(j=>j.fp===fp);
+        if(!journey) return;
+        const touchpoints = [...journey.rows].sort((a,b)=>this.compareDates(a.dt, b.dt));
         const r = touchpoints[index];
-        if (!r) return;
+        if(!r) return;
         this._trackPanelView('showTouchpoint', [fp, index]);
 
-        const esc = this._escHtml.bind(this);
         const isSub = this.isSubscription(r);
-        const phase = this.classifyTouchpoint(r, journey.firstOrderTs);
-
-        // Semantic kind + badge for title / type kv-row
-        let kind, kindBadge;
-        if (r.t === 'c')      { kind = 'Click';        kindBadge = '<span class="badge click">CLICK</span>'; }
-        else if (r.t === 'v') { kind = 'Action';       kindBadge = '<span class="badge action">ACTION</span>'; }
-        else if (isSub)       { kind = 'Subscription'; kindBadge = '<span class="badge subscription">SUB</span>'; }
-        else                  { kind = 'Purchase';     kindBadge = '<span class="badge purchase">PURCHASE</span>'; }
-
-        const phaseLabel = phase === 'first' ? '1st purchase'
-            : phase === 'pre'  ? 'Pre-purchase'
-            : phase === 'post' ? 'Post-purchase'
-            : 'Touchpoint';
+        const type = r.t === 'c' ? 'click' : r.t === 'v' ? 'conv' : 'order';
+        const typeBadgeClass = type === 'click' ? 'badge-blue' : type === 'conv' ? 'badge-orange' : (isSub ? 'badge-subscription' : 'badge-green');
+        const typeLabel = type === 'click' ? 'CLICK' : type === 'conv' ? 'ACTION' : (isSub ? 'SUBSCRIPTION' : 'PURCHASE');
 
         const isNonEmpty = (v) => {
-            if (v === undefined || v === null) return false;
-            if (Array.isArray(v)) return v.length > 0 && !(v.length === 1 && String(v[0]) === '[]');
-            if (typeof v === 'string') { const s = v.trim(); return !!s && s !== '[]'; }
-            if (typeof v === 'number') return true;
-            if (typeof v === 'object') return Object.keys(v).length > 0;
+            if(v === undefined || v === null) return false;
+            if(Array.isArray(v)) return v.length > 0 && !(v.length === 1 && String(v[0]) === '[]');
+            if(typeof v === 'string') { const s = v.trim(); return !!s && s !== '[]'; }
+            if(typeof v === 'number') return true;
+            if(typeof v === 'object') return Object.keys(v).length > 0;
             return String(v).trim() !== '' && String(v).trim() !== '[]';
         };
 
-        // Per-field value formatters (xlinks, chips, money styling, etc.)
-        const fmtField = (k, v) => {
-            if (typeof v === 'object') v = JSON.stringify(v);
-            const str = String(v);
-            switch (k) {
-                case 'fp':  return `<a class="xlink mono" onclick="D.navigateToFingerprint('${esc(str)}')">${esc(str)}</a>`;
-                case 'oid': return `<a class="xlink mono" onclick="D.navigateToOrder('${esc(str)}')">#${esc(str)}</a>`;
-                case 'nm':  return r.cid ? `<a class="xlink" onclick="D.navigateToCustomer('${esc(r.cid)}')">${esc(str)}</a>` : esc(str);
-                case 'em':  return r.cid ? `<a class="xlink" onclick="D.navigateToCustomer('${esc(r.cid)}')">${esc(str)}</a>` : esc(str);
-                case 'cid': return `<a class="xlink mono" onclick="D.navigateToCustomer('${esc(str)}')">${esc(str)}</a>`;
-                case 'src': return `<span class="src-chip"><span class="src-dot ${this.canonicalizeSource(str)}"></span>${esc(str)}</span>`;
-                case 'vt':  return `<b style="color:var(--orange)">${esc(str)}</b>`;
-                case 'pr':  return `<span style="color:var(--green);font-weight:700;">$${Number(str).toFixed(2)}</span>`;
-                case 'pay': return `<span style="color:var(--orange);font-weight:600;">$${Number(str).toFixed(2)}</span>`;
-                case 'st':  return `<span class="badge purchase">${esc(str)}</span>`;
-                default:    return esc(str);
-            }
+        const xlinkFields = {
+            fp: (v) => `<a class="xlink" onclick="D.navigateToFingerprint('${v}')">${v}</a>`,
+            oid: (v) => `<a class="xlink" onclick="D.navigateToOrder('${v}')">#${v}</a>`,
+            nm: (v) => r.cid ? `<a class="xlink" onclick="D.navigateToCustomer('${r.cid}')">${v}</a>` : v,
+            em: (v) => r.cid ? `<a class="xlink" onclick="D.navigateToCustomer('${r.cid}')">${v}</a>` : v,
+            cid: (v) => `<a class="xlink" onclick="D.navigateToCustomer('${v}')">${v}</a>`,
         };
 
-        // Which kv-row cells should render with mono font (IDs, dates, IPs, creatives)
-        const monoKeys = new Set(['fp', 'oid', 'cid', 'dt', 'ip', 'ua', 'addr', 'zip', 's4', 'pr', 'pay']);
-
-        // Prioritized field order for the kv-grid — then any remaining keys in insertion order.
-        const priority = [
-            'vt', 'oid', 'pr', 'pay', 'st', 'app',
-            'src', 'cmp', 'rcmp', 'fsrc', 'fmed', 'lsrc', 'lmed',
-            'adg', 's1', 's2', 's3', 's4', 's5', 's6', 'plc',
-            'dev', 'br', 'os', 'ua',
-            'co', 'ci', 'ip', 'isp', 'addr', 'zip',
-            'nm', 'em', 'cid', 'fp',
-            'cur',
-        ];
-        const seen = new Set(['t', 'dt']); // `t` is the type discriminator, `dt` is the top-of-grid Date row
-        const ordered = [];
-        priority.forEach(k => {
-            if (seen.has(k)) return;
-            if (!(k in r)) return;
-            seen.add(k);
-            ordered.push(k);
-        });
-        Object.keys(r).forEach(k => { if (!seen.has(k)) { seen.add(k); ordered.push(k); } });
-
-        // Build kv-grid rows: always lead with Type + Date, then the rest (filtered by visibility + non-empty).
-        const kvRow = (label, valueHtml, isMono) => `<div class="kv-row"><div class="kv-k">${esc(label)}</div><div class="kv-v${isMono ? ' mono' : ''}">${valueHtml}</div></div>`;
-
-        let rows = '';
-        rows += kvRow('Type', kindBadge, false);
-        rows += kvRow('Date', esc(this.fmtDate(r.dt)), true);
-
-        let renderedCount = 0;
-        ordered.forEach(k => {
+        let dlHtml = '';
+        Object.keys(r).forEach(k => {
             const v = r[k];
-            if (!isNonEmpty(v)) return;
-            if (!this.isFieldVisible(k)) return;
+            if(!isNonEmpty(v)) return;
+            if(!this.isFieldVisible(k)) return;
+            let disp = v;
+            if(typeof v === 'object') disp = JSON.stringify(v);
+            if(xlinkFields[k]) disp = xlinkFields[k](v);
             const label = Dashboard.LABEL_MAP[k] || k;
-            rows += kvRow(label, fmtField(k, v), monoKeys.has(k));
-            renderedCount++;
+            dlHtml += `<dt>${label}</dt><dd>${disp}</dd>`;
         });
 
-        // Hidden-field summary for the configurator button
-        const hiddenInRecord = [...this.tpHiddenFields].filter(k => r[k] !== undefined);
-        const hiddenBadge = hiddenInRecord.length > 0
-            ? `<span style="background:var(--gold-bg);color:var(--gold-ink);border-radius:10px;padding:1px 8px;font-size:11px;font-weight:700;margin-left:6px;">${hiddenInRecord.length} hidden</span>`
+        if(!dlHtml) dlHtml = '<dt style="color:var(--text-dim)">All fields hidden</dt><dd><a class="xlink" onclick="D.showTpFieldConfigurator(\'${fp}\',${index})">Configure fields →</a></dd>';
+
+        const hiddenCount = [...this.tpHiddenFields].filter(k => r[k] !== undefined).length;
+        const hiddenBadge = hiddenCount > 0
+            ? `<span style="background:#fef3c7;color:#92400e;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:700;margin-left:6px;">${hiddenCount} hidden</span>`
             : '';
 
-        // ─── panel-head ─────────────────────────────────────────────────
-        const positionLabel = `#${index + 1}`;
-        const fpInlineLink = `<a class="xlink mono" onclick="D.showJourneyPathsTable('${esc(fp)}')">${esc(fp)}</a>`;
-        const head = `
-            ${this._panelControlsV2()}
-            <div class="panel-title">
-                ${esc(kind)} <span class="dim">· Touchpoint ${esc(positionLabel)}</span>
-                <span class="panel-subtitle">in journey ${fpInlineLink}</span>
-            </div>
-            <div class="panel-meta">
-                <div class="stat"><b>${index + 1}</b><span>of ${journey.count}</span></div>
-                <div class="stat"><b>${esc(phaseLabel)}</b><span>Phase</span></div>
-                ${(r.pr != null && r.pr !== '') ? `<div class="stat"><b style="color:var(--green)">$${Number(r.pr).toFixed(2)}</b><span>Value</span></div>` : ''}
-                ${(r.pay != null && r.pay !== '' && r.t === 'v') ? `<div class="stat"><b style="color:var(--orange)">$${Number(r.pay).toFixed(2)}</b><span>Payout</span></div>` : ''}
-            </div>`;
+        let html = `<div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;">
+            <span class="badge ${typeBadgeClass}">${typeLabel}</span>
+            <span style="color:var(--text-dim);font-weight:700;">${this.fmtDate(r.dt)}</span>
+        </div>`;
+        html += `<div class="cust-card"><h4>Touchpoint data</h4><dl class="cust-grid">${dlHtml}</dl></div>`;
+        html += `<button onclick="D.showTpFieldConfigurator('${fp}',${index})" style="margin-top:14px;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:10px 16px;border:1px dashed #c7d2fe;border-radius:8px;background:#eef2ff;color:#4338ca;font-size:13px;font-weight:600;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='#e0e7ff'" onmouseout="this.style.background='#eef2ff'">
+            ⚙ Configure visible fields${hiddenBadge}
+        </button>`;
 
-        // ─── panel-body ─────────────────────────────────────────────────
-        const relatedLinks = [];
-        relatedLinks.push(`<a class="xlink" onclick="D.showJourneyPathsTable('${esc(fp)}')">↗ Open full journey path (${journey.count} touchpoints)</a>`);
-        if (journey.custId) {
-            const custLabel = journey.custName || journey.custEmail || journey.custId;
-            relatedLinks.push(`<a class="xlink" onclick="D.navigateToCustomer('${esc(journey.custId)}')">↗ Open customer · ${esc(custLabel)}</a>`);
-        }
-        if (r.t === 'o' && r.oid) {
-            relatedLinks.push(`<a class="xlink" onclick="D.navigateToOrder('${esc(r.oid)}')">↗ Open order #${esc(r.oid)}</a>`);
-        }
-
-        const body = `
-            <div class="section-head">
-                <h3>${esc(kind)} details</h3>
-                <span class="muted">${renderedCount === 0 ? 'All fields are hidden — open the configurator below' : `${renderedCount} field${renderedCount === 1 ? '' : 's'} shown${hiddenInRecord.length ? ` · ${hiddenInRecord.length} hidden` : ''}`}</span>
-            </div>
-            <div class="kv-grid">${rows}</div>
-            <div class="section-head" style="margin-top:4px;">
-                <h3>Related</h3>
-                <span class="muted">Jump to context</span>
-            </div>
-            <div class="related-links">${relatedLinks.join('')}</div>
-            <button onclick="D.showTpFieldConfigurator('${esc(fp)}',${index})" class="btn" style="margin-top:4px;align-self:flex-start;display:inline-flex;align-items:center;gap:8px;">
-                ⚙ Configure visible fields${hiddenBadge}
-            </button>`;
-
-        this._openPanel({ head, body });
+        this._openDetailContainer(html);
         makePanelResizable();
     }
 
@@ -2020,7 +1598,6 @@ class Dashboard {
 
     // Renders <tbody> rows for the customer orders table (used by showCustomer + date sort toggle)
     _renderCustomerOrdersBody(orders, sortDir) {
-        const esc = this._escHtml.bind(this);
         const sorted = [...orders].sort((a, b) => {
             const da = this.parseDate(a.dt);
             const db = this.parseDate(b.dt);
@@ -2031,42 +1608,23 @@ class Dashboard {
         });
         let html = '';
         sorted.forEach((o, i) => {
+            const stBadge = o.st === 'FULFILLED' ? 'badge-green' : o.st === 'PENDING' ? 'badge-orange' : 'badge-grey';
             const isSub = this.isSubscription(o);
-            const subTag = isSub ? ' <span class="badge subscription">SUB</span>' : '';
-            const oidLink = o.oid
-                ? `<a class="xlink mono" onclick="event.stopPropagation();D.navigateToOrder('${esc(o.oid)}')">#${esc(o.oid)}</a>`
-                : '<span class="dim">—</span>';
-
-            let stBadge = '<span class="dim">—</span>';
-            if (o.st) {
-                const up = String(o.st).toUpperCase();
-                const variant = up === 'FULFILLED' ? 'purchase' : up === 'PENDING' ? 'action' : 'subscription';
-                stBadge = `<span class="badge ${variant}">${esc(o.st)}</span>`;
-            }
-
-            const src = o.fsrc || o.src || '';
-            const srcChip = src
-                ? `<span class="src-chip"><span class="src-dot ${this.canonicalizeSource(src)}"></span>${esc(src)}</span>`
-                : '<span class="dim">—</span>';
-            const lsrcChip = o.lsrc
-                ? `<span class="src-chip"><span class="src-dot ${this.canonicalizeSource(o.lsrc)}"></span>${esc(o.lsrc)}</span>`
-                : '<span class="dim">—</span>';
-
-            const dimOr = (v) => v ? esc(v) : '<span class="dim">—</span>';
-
-            html += `<tr class="${isSub ? 'subscription-row' : ''}" style="cursor:pointer;" onclick="D.showOrder('${esc(o.oid || '')}')">
-                <td class="dim">${i + 1}</td>
+            const subTag = isSub ? ' <span class="badge badge-subscription">Subscription</span>' : '';
+            const oidLink = `<a class="xlink" onclick="event.stopPropagation();D.navigateToOrder('${o.oid}')">#${o.oid}</a>`;
+            html += `<tr class="${isSub ? 'subscription-row' : ''}" style="cursor:pointer;" onclick="D.showOrder('${o.oid}')">
+                <td>${i + 1}</td>
                 <td>${oidLink}${subTag}</td>
-                <td class="mono dim" style="white-space:nowrap;">${esc(this.fmtDate(o.dt))}</td>
-                <td class="mono" style="color:var(--green);font-weight:700;">$${(o.pr || 0).toFixed(2)}</td>
-                <td>${stBadge}</td>
-                <td>${dimOr(o.rcmp)}</td>
-                <td>${srcChip}</td>
-                <td>${lsrcChip}</td>
-                <td>${dimOr(o.app)}</td>
-                <td>${dimOr(o.ci)}</td>
-                <td>${dimOr(o.co)}</td>
-                <td class="mono dim">${dimOr(o.cur)}</td>
+                <td style="white-space:nowrap;">${this.fmtDate(o.dt)}</td>
+                <td><strong>$${(o.pr || 0).toFixed(2)}</strong></td>
+                <td><span class="badge ${stBadge}">${o.st || 'N/A'}</span></td>
+                <td>${o.rcmp || ''}</td>
+                <td>${o.fsrc || ''}</td>
+                <td>${o.lsrc || ''}</td>
+                <td>${o.app || ''}</td>
+                <td>${o.ci || ''}</td>
+                <td>${o.co || ''}</td>
+                <td>${o.cur || ''}</td>
             </tr>`;
         });
         return html;
@@ -2074,7 +1632,6 @@ class Dashboard {
 
     // Renders <tbody> rows for the customer touchpoints table (used by showCustomer + date sort toggle)
     _renderCustomerTouchpointsBody(allTouchpoints, sortDir, firstOrderTs) {
-        const esc = this._escHtml.bind(this);
         const sorted = [...allTouchpoints].sort((a, b) => {
             const da = this.parseDate(a.dt);
             const db = this.parseDate(b.dt);
@@ -2088,93 +1645,34 @@ class Dashboard {
             if (!(r._fp in fpCounters)) fpCounters[r._fp] = 0;
             r._fpIdx = fpCounters[r._fp]++;
         });
-        const dimOr = (v) => v ? esc(v) : '<span class="dim">—</span>';
-        const monoDim = (v) => v ? `<span class="mono dim">${esc(v)}</span>` : '<span class="dim">—</span>';
-
         let html = '';
         sorted.forEach((r, i) => {
+            const type = r.t === 'c' ? 'click' : r.t === 'v' ? 'conv' : 'order';
             const phase = this.classifyTouchpoint(r, firstOrderTs);
-            const isSub = this.isSubscription(r);
-            const isSubAct = this.isSubscriptionAction(r);
+            const phaseRowCls = phase === 'first' ? ' first-purchase-row' : phase === 'pre' ? ' pre-purchase-row' : '';
+            const purchaseExtra = (r.t === 'o' && phase === 'first') ? ' <span class="first-purchase-badge">★ 1st</span>' : '';
 
-            const rowClasses = [
-                r.t === 'c' ? 'click' : r.t === 'v' ? 'conv' : 'order',
-                isSub ? 'subscription-row' : '',
-                phase === 'first' ? 'first first-purchase-row' : '',
-                phase === 'pre'   ? 'pre pre-purchase-row' : '',
-                isSubAct ? 'muted sub-action-row' : '',
-            ].filter(Boolean).join(' ');
-
-            let typeBadge;
-            if (r.t === 'c')      typeBadge = '<span class="badge click">CLICK</span>';
-            else if (r.t === 'v') typeBadge = '<span class="badge action">ACTION</span>';
-            else                  typeBadge = isSub
-                ? '<span class="badge subscription">SUB</span>'
-                : '<span class="badge purchase">PURCHASE</span>';
-            const firstBadge = (r.t === 'o' && phase === 'first')
-                ? ' <span class="first-purchase-badge">★ 1st</span>'
-                : '';
-
-            const vtCell = r.vt
-                ? `<b style="color:var(--orange)">${esc(r.vt)}</b>`
-                : '<span class="dim">—</span>';
-
-            const source = r.src || r.fsrc || '';
-            const srcCell = source
-                ? `<span class="src-chip"><span class="src-dot ${this.canonicalizeSource(source)}"></span>${esc(source)}</span>`
-                : '<span class="dim">—</span>';
-
-            const adGroup = r.adg || r.s1 || '';
+            const typeBadge = r.t === 'c' ? '<span class="badge badge-blue">CLICK</span>'
+                : r.t === 'v' ? '<span class="badge badge-orange">ACTION</span>'
+                : (this.isSubscription(r) ? '<span class="badge badge-subscription">SUBSCRIPTION</span>' : '<span class="badge badge-green">PURCHASE</span>');
             const ip = r.click_ip || r.conversion_ip || r.order_ip || r.ip || '';
-
-            const payout = (r.t === 'v' && r.pay != null && r.pay !== '')
-                ? `<span class="mono" style="color:var(--orange);font-weight:600;">$${Number(r.pay).toFixed(2)}</span>`
-                : '<span class="dim">—</span>';
-            const value = (r.t === 'o' && r.pr != null && r.pr !== '')
-                ? `<span class="mono" style="color:var(--green);font-weight:700;">$${Number(r.pr).toFixed(2)}</span>`
-                : '<span class="dim">—</span>';
-
-            let stBadge;
-            if (r.t !== 'o' || !r.st) {
-                stBadge = '<span class="dim">—</span>';
-            } else {
-                const up = String(r.st).toUpperCase();
-                const variant = up === 'FULFILLED' ? 'purchase' : up === 'PENDING' ? 'action' : 'subscription';
-                stBadge = `<span class="badge ${variant}">${esc(r.st)}</span>`;
-            }
-
-            const oidLink = r.oid
-                ? `<a class="xlink mono" onclick="event.stopPropagation();D.navigateToOrder('${esc(r.oid)}')">#${esc(r.oid)}</a>`
-                : '<span class="dim">—</span>';
-            const fpLink = r._fp
-                ? `<a class="xlink mono" onclick="event.stopPropagation();D.showJourneyPathsTable('${esc(r._fp)}')" title="${esc(r._fp)}">${esc(r._fp)}</a>`
-                : '<span class="dim">—</span>';
-            const custLink = r.nm
-                ? esc(r.nm)
-                : '<span class="dim">—</span>';
-
-            html += `<tr class="${rowClasses}" style="cursor:pointer;" onclick="D.showTouchpoint('${esc(r._fp || '')}',${r._fpIdx})">
-                <td class="dim">${i + 1}</td>
-                <td>${typeBadge}${firstBadge}</td>
-                <td>${vtCell}</td>
-                <td class="mono dim" style="white-space:nowrap;">${esc(this.fmtDate(r.dt))}</td>
+            const payout = r.t === 'v' && r.pay != null && r.pay !== '' ? `$${Number(r.pay).toFixed(2)}` : '';
+            const value = r.t === 'o' && r.pr != null && r.pr !== '' ? `$${Number(r.pr).toFixed(2)}` : '';
+            const stBadge = r.t === 'o' ? (() => { const b = r.st === 'FULFILLED' ? 'badge-green' : r.st === 'PENDING' ? 'badge-orange' : 'badge-grey'; return `<span class="badge ${b}">${r.st || 'N/A'}</span>`; })() : '';
+            const source = r.src || r.fsrc || '';
+            const adGroup = r.adg || r.s1 || '';
+            const oidLink = r.oid ? `<a class="xlink" onclick="event.stopPropagation();D.navigateToOrder('${r.oid}')">#${r.oid}</a>` : '';
+            const fpLink = r._fp ? `<a class="xlink" onclick="event.stopPropagation();D.showJourneyPathsTable('${r._fp}')" style="font-family:monospace;font-size:11px;">${r._fp}</a>` : '';
+            const subActRowCls = this.isSubscriptionAction(r) ? ' sub-action-row' : '';
+            html += `<tr class="${type}${this.isSubscription(r) ? ' subscription-row' : ''}${phaseRowCls}${subActRowCls}" style="cursor:pointer;" onclick="D.showTouchpoint('${r._fp}',${r._fpIdx})">
+                <td>${i + 1}</td><td>${typeBadge}${purchaseExtra}</td><td>${r.vt || ''}</td><td style="white-space:nowrap;">${this.fmtDate(r.dt)}</td>
                 <td>${fpLink}</td>
-                <td>${srcCell}</td>
-                <td>${dimOr(r.cmp)}</td>
-                <td>${dimOr(r.rcmp)}</td>
-                <td>${dimOr(adGroup)}</td>
-                <td>${monoDim(r.s4)}</td>
-                <td>${dimOr(r.dev)}</td>
-                <td>${dimOr(r.br)}</td>
-                <td>${dimOr(r.os)}</td>
-                <td>${dimOr(r.co)}</td>
-                <td>${dimOr(r.ci)}</td>
-                <td>${monoDim(ip)}</td>
-                <td>${oidLink}</td>
-                <td>${custLink}</td>
-                <td>${payout}</td>
-                <td>${value}</td>
-                <td>${stBadge}</td>
+                <td>${source}</td><td>${r.cmp || ''}</td><td>${r.rcmp || ''}</td><td>${adGroup}</td>
+                <td>${r.s4 || ''}</td>
+                <td>${r.dev || ''}</td><td>${r.br || ''}</td><td>${r.os || ''}</td>
+                <td>${r.co || ''}</td><td>${r.ci || ''}</td><td>${ip}</td>
+                <td>${oidLink}</td><td>${r.nm || ''}</td>
+                <td>${payout}</td><td>${value}</td><td>${stBadge}</td>
             </tr>`;
         });
         return html;
@@ -2182,192 +1680,113 @@ class Dashboard {
 
     // Side panel: customer profile + orders table + all touchpoints across all fingerprints
     showCustomer(cid) {
-        const cust = this.customers.find(c => c.cid === cid);
-        if (!cust) return;
+        const cust = this.customers.find(c=>c.cid===cid);
+        if(!cust) return;
         this._trackPanelView('showCustomer', [cid]);
-        const esc = this._escHtml.bind(this);
 
-        const name = cust.nm || cust.em || '—';
-        const initials = String(name)
-            .split(/\s+/)
-            .map(p => p[0])
-            .filter(Boolean)
-            .slice(0, 2)
-            .join('')
-            .toUpperCase() || '?';
+        let html = `<div class="detail-title">${cust.nm}</div>`;
+        // Profile
+        html += '<div class="cust-card"><h4>Profile</h4><dl class="cust-grid">';
+        html += this.dlRow('Email',cust.em);
+        html += this.dlRow('Customer ID',cust.cid);
+        html += this.dlRow('Total Orders',cust.orderCount);
+        html += this.dlRow('Total Revenue','$'+cust.revenue.toFixed(2));
+        html += this.dlRow('Journey Paths',cust.fpCount);
+        html += this.dlRow('Total Touchpoints',cust.touchpoints);
+        html += this.dlRow('First Seen',this.fmtDate(cust.firstSeen));
+        html += this.dlRow('Last Seen',this.fmtDate(cust.lastSeen));
+        html += '</dl></div>';
 
-        // ─── panel-head ─────────────────────────────────────────────────
-        const head = `
-            ${this._panelControlsV2()}
-            <div class="panel-title">
-                Customer
-                <span class="pid">${esc(cust.cid)}</span>
-                ${cust.em ? `<span class="panel-subtitle">${esc(cust.em)}</span>` : ''}
-            </div>
-            <div class="panel-meta">
-                <div class="stat"><b>${cust.fpCount || 0}</b><span>Fingerprints</span></div>
-                <div class="stat"><b>${cust.orderCount || 0}</b><span>Orders</span></div>
-                <div class="stat"><b>${cust.touchpoints || 0}</b><span>Touchpoints</span></div>
-                ${cust.revenue > 0 ? `<div class="stat"><b style="color:var(--green)">$${cust.revenue.toFixed(2)}</b><span>Revenue</span></div>` : ''}
-            </div>`;
-
-        // ─── panel-body ─────────────────────────────────────────────────
-        let body = `
-            <div class="cust-card">
-                <div class="cust-avatar">${esc(initials)}</div>
-                <div class="cust-info">
-                    <div class="name">${esc(name)}</div>
-                    ${cust.em ? `<div class="email">${esc(cust.em)}</div>` : ''}
-                    <div class="cid">Customer ID · ${esc(cust.cid)}</div>
-                </div>
-                <div class="cust-kpis">
-                    <div class="kpi-box"><div class="v teal">${cust.fpCount || 0}</div><div class="l">Fingerprints</div></div>
-                    <div class="kpi-box"><div class="v">${cust.orderCount || 0}</div><div class="l">Orders</div></div>
-                    ${cust.revenue > 0 ? `<div class="kpi-box"><div class="v green">$${cust.revenue.toFixed(2)}</div><div class="l">Revenue</div></div>` : ''}
-                </div>
-            </div>`;
-
-        // ─── Fingerprints section ──────────────────────────────────────
+        // Fingerprints table
         const fps = cust.fps || [];
-        const fmtFpDate = (d) => {
-            if (!d) return '<span class="dim">—</span>';
-            const dt = this.parseDate(d);
-            return dt
-                ? `<span class="mono dim">${esc(dt.toLocaleDateString(undefined, { month: 'short', day: '2-digit', year: 'numeric' }))}</span>`
-                : `<span class="mono dim">${esc(String(d))}</span>`;
-        };
-
-        let fpRows = '';
+        html += `<div class="detail-sub">Fingerprints (${fps.length})</div>`;
+        html += `<div style="overflow-x:auto;">
+            <table class="tp-table">
+                <thead><tr>
+                    <th>#</th><th>Fingerprint</th><th>Clicks</th><th>Actions</th>
+                    <th>Orders</th><th style="text-align:right;">Revenue</th><th>First Seen</th><th>Last Seen</th><th>Touchpoints</th>
+                </tr></thead><tbody>`;
         fps.forEach((fp, i) => {
             const j = this.journeys.find(jj => jj.fp === fp);
-            const fpLink = `<a class="xlink mono" onclick="event.stopPropagation();D.showJourneyPathsTable('${esc(fp)}')" title="${esc(fp)}">${esc(fp)}</a>`;
+            const fpLink = `<a class="xlink" style="font-family:monospace;font-size:0.85em;color:#007892;cursor:pointer;" onclick="event.stopPropagation();D.navigateToFingerprint('${fp}')">${fp}</a>`;
             if (j) {
-                const src = j.src || '';
-                const srcChip = src
-                    ? `<span class="src-chip"><span class="src-dot ${this.canonicalizeSource(src)}"></span>${esc(src)}</span>`
-                    : '<span class="dim">—</span>';
-                const rev = j.revenue
-                    ? `<span class="mono" style="color:var(--green);font-weight:700;">$${j.revenue.toFixed(2)}</span>`
-                    : '<span class="dim">—</span>';
-                fpRows += `<tr style="cursor:pointer;" onclick="D.showJourneyPathsTable('${esc(fp)}')">
-                    <td class="dim">${i + 1}</td>
-                    <td>${fpLink}</td>
-                    <td>${srcChip}</td>
-                    <td>${j.clicks.length}</td>
-                    <td>${j.convs.length}</td>
-                    <td>${j.orders.length}</td>
-                    <td>${rev}</td>
-                    <td>${fmtFpDate(j.firstDate)}</td>
-                    <td>${fmtFpDate(j.lastDate)}</td>
+                const rev = j.revenue ? `$${j.revenue.toFixed(2)}` : '$0.00';
+                const fmtD = (d) => { if (!d) return '—'; const dt = this.parseDate(d); if (!dt) return String(d); return dt.toLocaleDateString(undefined, { month:'short', day:'2-digit', year:'numeric' }); };
+                html += `<tr>
+                    <td>${i + 1}</td><td>${fpLink}</td>
+                    <td>${j.clicks.length}</td><td>${j.convs.length}</td><td>${j.orders.length}</td>
+                    <td style="text-align:right;">${rev}</td>
+                    <td style="white-space:nowrap;">${fmtD(j.firstDate)}</td><td style="white-space:nowrap;">${fmtD(j.lastDate)}</td>
                     <td>${j.count}</td>
                 </tr>`;
             } else {
-                fpRows += `<tr>
-                    <td class="dim">${i + 1}</td>
-                    <td>${fpLink}</td>
-                    <td><span class="dim">—</span></td>
-                    <td><span class="dim">—</span></td>
-                    <td><span class="dim">—</span></td>
-                    <td><span class="dim">—</span></td>
-                    <td><span class="dim">—</span></td>
-                    <td><span class="dim">—</span></td>
-                    <td><span class="dim">—</span></td>
-                    <td><span class="dim">—</span></td>
-                </tr>`;
+                html += `<tr><td>${i + 1}</td><td>${fpLink}</td><td>—</td><td>—</td><td>—</td><td style="text-align:right;">—</td><td>—</td><td>—</td><td>—</td></tr>`;
             }
         });
+        html += `</tbody></table></div>`;
 
-        body += `
-            <div>
-                <div class="section-head">
-                    <h3>RedTrack Fingerprints</h3>
-                    <span class="muted">${fps.length} linked identit${fps.length === 1 ? 'y' : 'ies'}</span>
-                </div>
-                <div style="overflow-x:auto;">
-                    <table class="tp-table">
-                        <thead><tr>
-                            <th>#</th><th>Fingerprint</th><th>Source</th>
-                            <th>Clicks</th><th>Actions</th><th>Orders</th>
-                            <th>Revenue</th><th>First Seen</th><th>Last Seen</th><th>Touchpoints</th>
-                        </tr></thead>
-                        <tbody>${fpRows}</tbody>
-                    </table>
-                </div>
-            </div>`;
+        // Orders table
+        html += `<div class="detail-sub">Orders (${cust.orders.length})</div>`;
+        html += `<div style="overflow-x:auto;">
+            <table class="tp-table">
+                <thead>
+                    <tr>
+                        <th>#</th><th>Order ID</th><th style="cursor:pointer;" id="cust-orders-date-th" class="sort-asc">Date ↑</th><th>Value</th><th>Status</th>
+                        <th>Ref. Campaign</th><th>First Source</th><th>Last Source</th>
+                        <th>App</th><th>City</th><th>State</th><th>Currency</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+        html += this._renderCustomerOrdersBody(cust.orders, 'asc');
+        html += `</tbody></table></div>`;
 
-        // ─── Orders section ────────────────────────────────────────────
-        body += `
-            <div>
-                <div class="section-head">
-                    <h3>Orders</h3>
-                    <span class="muted">${cust.orders.length} order${cust.orders.length === 1 ? '' : 's'}</span>
-                </div>
-                <div style="overflow-x:auto;">
-                    <table class="tp-table">
-                        <thead><tr>
-                            <th>#</th><th>Order ID</th>
-                            <th class="sortable sorted sort-asc" id="cust-orders-date-th" style="cursor:pointer;">Date</th>
-                            <th>Value</th><th>Status</th>
-                            <th>Ref. Campaign</th><th>First Source</th><th>Last Source</th>
-                            <th>App</th><th>City</th><th>State</th><th>Currency</th>
-                        </tr></thead>
-                        <tbody>${this._renderCustomerOrdersBody(cust.orders, 'asc')}</tbody>
-                    </table>
-                </div>
-            </div>`;
+        html += '<div class="detail-sub">Full Journey — All Touchpoints</div>';
 
-        // ─── Full journey section ──────────────────────────────────────
         const allTp = [];
         cust.fps.forEach(fp => {
             const tp = this.raw.filter(r => r.fp === fp);
             tp.forEach(r => allTp.push({ ...r, _fp: fp }));
         });
 
-        body += `
-            <div>
-                <div class="section-head">
-                    <h3>Full Journey — All Touchpoints</h3>
-                    <span class="muted">${allTp.length} record${allTp.length === 1 ? '' : 's'} across ${fps.length} fingerprint${fps.length === 1 ? '' : 's'}</span>
-                </div>
-                <div style="overflow-x:auto;">
-                    <table class="tp-table">
-                        <thead><tr>
-                            <th>#</th><th>Type</th><th>Conv. Type</th>
-                            <th class="sortable sorted sort-asc" id="cust-tp-date-th" style="cursor:pointer;">Date</th>
-                            <th>Fingerprint</th><th>Source</th><th>Ad Campaign</th><th>Ref. Campaign</th>
-                            <th>Ad Group</th><th>Creative</th>
-                            <th>Device</th><th>Browser</th><th>OS</th>
-                            <th>State</th><th>City</th><th>IP</th>
-                            <th>Order</th><th>Customer</th>
-                            <th>Payout</th><th>Value</th><th>Status</th>
-                        </tr></thead>
-                        <tbody>${this._renderCustomerTouchpointsBody(allTp, 'asc', cust.firstOrderTs)}</tbody>
-                    </table>
-                </div>
-            </div>`;
+        html += `<div style="overflow-x:auto;">
+            <table class="tp-table">
+                <thead>
+                    <tr>
+                        <th>#</th><th>Type</th><th>Conv. Type</th><th style="cursor:pointer;" id="cust-tp-date-th" class="sort-asc">Date ↑</th><th>Fingerprint</th><th>Source</th><th>Ad Campaign</th><th>Ref. Campaign</th>
+                        <th>Ad Group</th><th>Creative</th><th>Device</th><th>Browser</th><th>OS</th>
+                        <th>State</th><th>City</th><th>IP</th>
+                        <th>Order</th><th>Customer</th><th>Payout</th><th>Value</th><th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+        html += this._renderCustomerTouchpointsBody(allTp, 'asc', cust.firstOrderTs);
+        html += '</tbody></table></div>';
 
-        this._openPanel({ head, body });
+        this._openDetailContainer(html);
         makePanelResizable();
 
-        // Rebind date sort toggles for the two inner tables
+        // Orders date sort toggle
         const ordersDateTh = document.getElementById('cust-orders-date-th');
         const ordersTbody = ordersDateTh ? ordersDateTh.closest('table').querySelector('tbody') : null;
         let ordersSortDir = 'asc';
         if (ordersDateTh && ordersTbody) {
             ordersDateTh.addEventListener('click', () => {
                 ordersSortDir = ordersSortDir === 'asc' ? 'desc' : 'asc';
-                ordersDateTh.className = 'sortable sorted ' + (ordersSortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+                ordersDateTh.textContent = ordersSortDir === 'asc' ? 'Date ↑' : 'Date ↓';
+                ordersDateTh.className = ordersSortDir === 'asc' ? 'sort-asc' : 'sort-desc';
                 ordersTbody.innerHTML = this._renderCustomerOrdersBody(cust.orders, ordersSortDir);
             });
         }
 
+        // Touchpoints date sort toggle
         const tpDateTh = document.getElementById('cust-tp-date-th');
         const tpTbody = tpDateTh ? tpDateTh.closest('table').querySelector('tbody') : null;
         let tpSortDir = 'asc';
         if (tpDateTh && tpTbody) {
             tpDateTh.addEventListener('click', () => {
                 tpSortDir = tpSortDir === 'asc' ? 'desc' : 'asc';
-                tpDateTh.className = 'sortable sorted ' + (tpSortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+                tpDateTh.textContent = tpSortDir === 'asc' ? 'Date ↑' : 'Date ↓';
+                tpDateTh.className = tpSortDir === 'asc' ? 'sort-asc' : 'sort-desc';
                 tpTbody.innerHTML = this._renderCustomerTouchpointsBody(allTp, tpSortDir, cust.firstOrderTs);
             });
         }
@@ -2386,7 +1805,7 @@ class Dashboard {
         this.markFiltersPending();
     }
 
-    // Rebuilds the filter rows UI for the current tab using v2 .filter-row markup.
+    // Rebuilds the filter rows UI for the current tab
     renderTabFilters() {
         const container = document.getElementById('tab-filters-rows');
         if (!container) return;
@@ -2402,68 +1821,62 @@ class Dashboard {
         }
         if (addBtn) addBtn.style.display = '';
 
-        const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
         let html = '';
         filters.forEach((f, i) => {
             const fieldDef = fields.find(fd => fd.key === f.field) || fields[0];
             const operators = FILTER_OPERATORS[fieldDef.type] || [];
 
-            html += `<div class="filter-row">`;
-            html += `<span class="logic ${i === 0 ? 'first' : ''}">${i === 0 ? 'WHERE' : 'AND'}</span>`;
-
-            html += `<select class="filter-select" onchange="D.updateTabFilter(${i},'field',this.value)">`;
+            html += '<div class="tab-filter-row">';
+            html += '<select class="tf-field" onchange="D.updateTabFilter(' + i + ',\'field\',this.value)">';
             fields.forEach(fd => {
-                html += `<option value="${esc(fd.key)}"${fd.key === f.field ? ' selected' : ''}>${esc(fd.label)}</option>`;
+                html += '<option value="' + fd.key + '"' + (fd.key === f.field ? ' selected' : '') + '>' + fd.label + '</option>';
             });
-            html += `</select>`;
+            html += '</select>';
 
-            html += `<select class="filter-select" onchange="D.updateTabFilter(${i},'operator',this.value)">`;
+            html += '<select class="tf-operator" onchange="D.updateTabFilter(' + i + ',\'operator\',this.value)">';
             operators.forEach(op => {
-                html += `<option value="${esc(op.key)}"${op.key === f.operator ? ' selected' : ''}>${esc(op.label)}</option>`;
+                html += '<option value="' + op.key + '"' + (op.key === f.operator ? ' selected' : '') + '>' + op.label + '</option>';
             });
-            html += `</select>`;
+            html += '</select>';
 
             if (fieldDef.type === 'select') {
                 const uniqueVals = this._getUniqueFilterValues(tab, fieldDef);
-                html += `<select class="filter-select" onchange="D.updateTabFilter(${i},'value',this.value)">`;
-                html += `<option value="">— select —</option>`;
+                html += '<select class="tf-value" onchange="D.updateTabFilter(' + i + ',\'value\',this.value)">';
+                html += '<option value="">— select —</option>';
                 uniqueVals.forEach(v => {
-                    html += `<option value="${esc(v)}"${v === f.value ? ' selected' : ''}>${esc(v)}</option>`;
+                    const escaped = String(v).replace(/"/g, '&quot;');
+                    html += '<option value="' + escaped + '"' + (v === f.value ? ' selected' : '') + '>' + v + '</option>';
                 });
-                html += `</select>`;
+                html += '</select>';
             } else if (fieldDef.type === 'bool') {
-                html += `<select class="filter-select" onchange="D.updateTabFilter(${i},'value',this.value)">`;
-                html += `<option value="">— select —</option>`;
-                html += `<option value="yes"${f.value === 'yes' ? ' selected' : ''}>Yes</option>`;
-                html += `<option value="no"${f.value === 'no' ? ' selected' : ''}>No</option>`;
-                html += `</select>`;
+                html += '<select class="tf-value" onchange="D.updateTabFilter(' + i + ',\'value\',this.value)">';
+                html += '<option value="">— select —</option>';
+                html += '<option value="yes"' + (f.value === 'yes' ? ' selected' : '') + '>Yes</option>';
+                html += '<option value="no"' + (f.value === 'no' ? ' selected' : '') + '>No</option>';
+                html += '</select>';
             } else if (fieldDef.type === 'number' && f.operator === 'between') {
                 const parts = (f.value || '').split(',');
-                html += `<input type="number" class="mgmt-input" style="max-width:110px;height:32px;" placeholder="min" value="${esc(parts[0] || '')}" onchange="D.updateTabFilterRange(${i},0,this.value)">`;
-                html += `<span style="color:var(--ink-3);font-size:12px;">and</span>`;
-                html += `<input type="number" class="mgmt-input" style="max-width:110px;height:32px;" placeholder="max" value="${esc(parts[1] || '')}" onchange="D.updateTabFilterRange(${i},1,this.value)">`;
+                html += '<input type="number" class="tf-value" placeholder="min" value="' + (parts[0] || '') + '" onchange="D.updateTabFilterRange(' + i + ',0,this.value)">';
+                html += '<span style="color:var(--text-dim);font-size:12px;">and</span>';
+                html += '<input type="number" class="tf-value" placeholder="max" value="' + (parts[1] || '') + '" onchange="D.updateTabFilterRange(' + i + ',1,this.value)">';
             } else if (fieldDef.type === 'number') {
-                html += `<input type="number" class="mgmt-input" style="max-width:140px;height:32px;" placeholder="value" value="${esc(f.value || '')}" onchange="D.updateTabFilter(${i},'value',this.value)">`;
+                html += '<input type="number" class="tf-value" placeholder="value" value="' + (f.value || '') + '" onchange="D.updateTabFilter(' + i + ',\'value\',this.value)">';
             } else {
-                html += `<input type="text" class="mgmt-input" style="min-width:180px;height:32px;" placeholder="type to filter…" value="${esc(f.value || '')}" oninput="D.updateTabFilter(${i},'value',this.value)">`;
+                html += '<input type="text" class="tf-value" placeholder="type to filter..." value="' + (f.value || '').replace(/"/g, '&quot;') + '" oninput="D.updateTabFilter(' + i + ',\'value\',this.value)">';
             }
 
-            html += `<button class="filter-remove" onclick="D.removeTabFilter(${i})" title="Remove filter">×</button>`;
-            html += `</div>`;
+            html += '<button class="btn-remove-filter" onclick="D.removeTabFilter(' + i + ')" title="Remove filter">×</button>';
+            html += '</div>';
         });
 
         if (tab === 'orders') {
-            html += `<div class="filter-row" style="gap:6px;">
-                <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2);cursor:pointer;">
-                    <input type="checkbox" onchange="D.toggleSubscriptions()" id="hide-subs-toggle"${this._hideSubscriptions ? ' checked' : ''}>
-                    Hide subscriptions
-                </label>
-            </div>`;
+            html += `<label style="display:inline-flex;align-items:center;gap:4px;margin-left:12px;font-size:13px;cursor:pointer;">
+                <input type="checkbox" onchange="D.toggleSubscriptions()" id="hide-subs-toggle"${this._hideSubscriptions ? ' checked' : ''}>
+                Hide subscriptions
+            </label>`;
         }
 
         container.innerHTML = html;
-        this.enhanceSelects();
     }
 
     // Collects unique values from current data for a select-type filter dropdown
@@ -2757,7 +2170,7 @@ class Dashboard {
         const currentValue = stop.value;
         const borderColor = stopNum === 2 ? 'var(--orange)' : 'var(--green)';
 
-        let html = '<div class="stop-popup stop' + stopNum + '" onclick="event.stopPropagation()" style="position:static;border-top:3px solid ' + borderColor + ';min-width:240px;padding:14px 16px;">';
+        let html = '<div class="stop-popup" onclick="event.stopPropagation()" style="border-top:3px solid ' + borderColor + ';">';
         html += '<div class="stop-popup-title">Configure Stop ' + stopNum + '</div>';
         html += '<label class="stop-popup-label">Dimension</label>';
         html += '<select class="stop-popup-select" onchange="D.setStopDim(' + stopNum + ', this.value);D._activeStopPopup=' + stopNum + ';">';
@@ -2786,7 +2199,7 @@ class Dashboard {
 
     _renderStopFingerprints(fps, rowName) {
         if (!fps || !fps.length) {
-            return '<div class="expand-empty" style="padding:16px;color:var(--ink-3);font-size:12.5px;">No matching journeys</div>';
+            return '<div style="padding:16px;color:var(--text-dim);font-size:13px;">No matching journeys</div>';
         }
         const total = fps.length;
         const pageSize = this._stopFpsPageSize;
@@ -2796,19 +2209,18 @@ class Dashboard {
         const pageStart = page * pageSize;
         const pageEnd = Math.min(pageStart + pageSize, total);
         const pageFps = fps.slice(pageStart, pageEnd);
-        const esc = this._escHtml.bind(this);
 
-        let html = `<div class="expand-heading">Matching fingerprints · <b>${total}</b></div>`;
-        html += '<div style="overflow-x:auto;"><table class="tp-table"><thead><tr>';
+        let html = '<div style="overflow-x:auto;">';
+        html += '<table class="tp-table"><thead><tr>';
         html += '<th style="width:40px;">#</th>';
         html += '<th>Fingerprint</th>';
         html += '<th>Customer</th>';
         html += '<th>Source</th>';
         html += '<th>Ad Campaign</th>';
         html += '<th style="text-align:center;">Touchpoints</th>';
-        html += '<th style="text-align:center;">Clicks</th>';
-        html += '<th style="text-align:center;">Actions</th>';
-        html += '<th style="text-align:center;">Orders</th>';
+        html += '<th>Clicks</th>';
+        html += '<th>Actions</th>';
+        html += '<th>Orders</th>';
         html += '<th>Revenue</th>';
         html += '<th>First Seen</th>';
         html += '<th>Last Seen</th>';
@@ -2816,31 +2228,27 @@ class Dashboard {
         pageFps.forEach((fp, i) => {
             const journey = this.journeys.find(j => j.fp === fp);
             if (!journey) return;
-            const custLabel = journey.custName || journey.custEmail || '— prospect';
+            const custLabel = journey.custName || journey.custEmail || '—';
             const custLink = journey.custId
-                ? `<a class="xlink" onclick="event.stopPropagation();D.navigateToCustomer('${journey.custId}')">${esc(custLabel)}</a>`
-                : `<span class="dim">${esc(custLabel)}</span>`;
+                ? '<a class="xlink" onclick="event.stopPropagation();D.navigateToCustomer(\'' + journey.custId + '\')">' + custLabel + '</a>'
+                : custLabel;
             const fpShort = fp.length > 16 ? fp.substring(0, 14) + '…' : fp;
-            const rev = journey.revenue
-                ? `<span class="mono" style="color:var(--green);font-weight:700;">$${journey.revenue.toFixed(2)}</span>`
-                : '<span class="dim">—</span>';
-            const src = journey.src
-                ? `<span class="src-chip"><span class="src-dot ${this.canonicalizeSource(journey.src)}"></span>${esc(journey.src)}</span>`
-                : '<span class="dim">—</span>';
-            const cmp = esc(journey.cmp || '—');
-            html += `<tr onclick="event.stopPropagation();D.showJourneyPathsTable('${fp}')">`;
-            html += `<td class="dim">${pageStart + i + 1}</td>`;
-            html += `<td><a class="xlink mono" style="font-size:11px;">${esc(fpShort)}</a></td>`;
-            html += `<td>${custLink}</td>`;
-            html += `<td>${src}</td>`;
-            html += `<td>${cmp}</td>`;
-            html += `<td style="text-align:center;">${journey.count}</td>`;
-            html += `<td style="text-align:center;">${(journey.clicks || []).length}</td>`;
-            html += `<td style="text-align:center;">${(journey.convs || []).length}</td>`;
-            html += `<td style="text-align:center;">${(journey.orders || []).length}</td>`;
-            html += `<td>${rev}</td>`;
-            html += `<td class="mono dim" style="white-space:nowrap;">${esc(this.fmtDate(journey.firstDate) || '—')}</td>`;
-            html += `<td class="mono dim" style="white-space:nowrap;">${esc(this.fmtDate(journey.lastDate) || '—')}</td>`;
+            const rev = journey.revenue ? '$' + journey.revenue.toFixed(2) : '—';
+            const src = journey.src || '—';
+            const cmp = journey.cmp || '—';
+            html += '<tr onclick="event.stopPropagation();D.showJourneyPathsTable(\'' + fp + '\')">';
+            html += '<td>' + (pageStart + i + 1) + '</td>';
+            html += '<td><a class="xlink" style="font-family:monospace;font-size:11px;">' + fpShort + '</a></td>';
+            html += '<td>' + custLink + '</td>';
+            html += '<td>' + src + '</td>';
+            html += '<td>' + cmp + '</td>';
+            html += '<td style="text-align:center;">' + journey.count + '</td>';
+            html += '<td style="text-align:center;">' + (journey.clicks ? journey.clicks.length : 0) + '</td>';
+            html += '<td style="text-align:center;">' + (journey.convs ? journey.convs.length : 0) + '</td>';
+            html += '<td style="text-align:center;">' + (journey.orders ? journey.orders.length : 0) + '</td>';
+            html += '<td>' + rev + '</td>';
+            html += '<td style="white-space:nowrap;">' + (this.fmtDate(journey.firstDate) || '—') + '</td>';
+            html += '<td style="white-space:nowrap;">' + (this.fmtDate(journey.lastDate) || '—') + '</td>';
             html += '</tr>';
         });
         html += '</tbody></table></div>';
@@ -2848,10 +2256,10 @@ class Dashboard {
         if (totalPages > 1) {
             const escapedName = rowName.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
             html += '<div class="pager">';
-            html += `<span>Showing ${pageStart + 1}–${pageEnd} of ${total}</span>`;
+            html += '<span>Showing ' + (pageStart + 1) + '–' + pageEnd + ' of ' + total + '</span>';
             html += '<div>';
-            html += `<button onclick="event.stopPropagation();D.setStopFpsPage('${escapedName}', -1)"${page === 0 ? ' disabled' : ''}>← Prev</button>`;
-            html += `<button onclick="event.stopPropagation();D.setStopFpsPage('${escapedName}', 1)" style="margin-left:6px;"${page >= totalPages - 1 ? ' disabled' : ''}>Next →</button>`;
+            html += '<button onclick="event.stopPropagation();D.setStopFpsPage(\'' + escapedName + '\', -1)"' + (page === 0 ? ' disabled' : '') + '>← Prev</button>';
+            html += '<button onclick="event.stopPropagation();D.setStopFpsPage(\'' + escapedName + '\', 1)" style="margin-left:6px;"' + (page >= totalPages - 1 ? ' disabled' : '') + '>Next →</button>';
             html += '</div>';
             html += '</div>';
         }
@@ -2859,171 +2267,112 @@ class Dashboard {
         return html;
     }
 
-    // Maps a raw source string to one of the canonical keys used by `.src-dot.<key>`.
-    // Falls back to 'unknown' rather than the raw slug so unrecognized channels don't
-    // accidentally get an un-styled dot.
-    canonicalizeSource(src) {
-        if (!src) return 'unknown';
-        const s = String(src).toLowerCase().trim();
-
-        if (/\bfacebook\b|^fb\b|\bmeta ads\b/.test(s)) return 'facebook';
-        if (/\bgoogle\b|\bgads\b|\badwords\b|\bpmax\b/.test(s)) return 'google';
-        if (/\btik.?tok\b/.test(s)) return 'tiktok';
-        if (/\bbing\b|\bmicrosoft ads\b/.test(s)) return 'bing';
-
-        if (/klaviyo|mailchimp|sendgrid|newsletter|abandoned cart|welcome series|\(sb\)|\bemail\b/.test(s)) return 'email';
-        if (/\bsms\b|pushowl|push notification/.test(s)) return 'sms';
-
-        if (/organic|\bseo\b/.test(s)) return 'organic';
-        if (/^direct$|shop.?app|judge.?me|klarna|shopify/.test(s)) return 'direct';
-        if (/referral|referrer/.test(s)) return 'referral';
-        if (/\bsocial\b/.test(s)) return 'social';
-        if (/unattributed/.test(s)) return 'unknown';
-
-        return 'unknown';
-    }
-
-    _escHtml(s) {
-        return String(s == null ? '' : s)
-            .replace(/&/g, '&amp;')
-            .replace(/"/g, '&quot;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
-    }
-
     renderAttribution() {
         const container = document.getElementById('tab-attribution');
         if (!container) return;
+        container.style.position = 'relative';
 
         const stop1Dim = STOP_DIMENSIONS.find(d => d.key === this._stops.stop1.dimKey) || STOP_DIMENSIONS[0];
         const stop2Dim = this._stops.stop2.dimKey ? STOP_DIMENSIONS.find(d => d.key === this._stops.stop2.dimKey) : null;
         const stop3Dim = this._stops.stop3.dimKey ? STOP_DIMENSIONS.find(d => d.key === this._stops.stop3.dimKey) : null;
-        const stop2Active = !!(this._stops.stop2.dimKey && this._stops.stop2.value);
-        const stop3Active = !!(this._stops.stop3.dimKey && this._stops.stop3.value);
+        const stop2Active = this._stops.stop2.dimKey && this._stops.stop2.value;
+        const stop3Active = this._stops.stop3.dimKey && this._stops.stop3.value;
 
         const data = this._computeStopsData();
         const sortCol = this._stopsSort.col;
         const sortAsc = this._stopsSort.asc;
-        const esc = this._escHtml.bind(this);
 
         let rows = Object.entries(data);
         rows.sort((a, b) => {
+            let va, vb;
             if (sortCol === 'name') {
-                const va = a[0].toLowerCase(), vb = b[0].toLowerCase();
+                va = a[0].toLowerCase(); vb = b[0].toLowerCase();
                 return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
             }
-            const va = a[1][sortCol] || 0, vb = b[1][sortCol] || 0;
+            va = a[1][sortCol] || 0; vb = b[1][sortCol] || 0;
             return sortAsc ? va - vb : vb - va;
         });
 
         const totalJourneys = rows.reduce((s, [, d]) => s + d.count, 0);
         const stop1Mode = this._stops.stop1.dimKey === 'cmp' ? 'campaign' : 'source';
-        const maxCount = rows.length ? Math.max(...rows.map(([, d]) => d.count), 1) : 1;
 
-        // Pre-compute per-row revenue once so we can also sort on it.
-        const revByName = {};
-        rows.forEach(([name, d]) => {
-            revByName[name] = (d.fps || []).reduce((s, fp) => {
-                const j = this.journeys.find(jj => jj.fp === fp);
-                return s + (j && j.revenue ? j.revenue : 0);
-            }, 0);
-        });
-        if (sortCol === 'revenue') {
-            rows.sort((a, b) => sortAsc ? revByName[a[0]] - revByName[b[0]] : revByName[b[0]] - revByName[a[0]]);
-        }
+        // Header bar — Stop 1 toggle (Source/Campaign) + summary
+        let html = '<div style="display:flex;align-items:center;gap:12px;padding:16px 20px 12px;flex-wrap:wrap;">';
+        html += '<h3 style="font-size:16px;font-weight:700;margin:0;">Attribution Analysis</h3>';
+        html += '<div style="display:flex;gap:6px;margin-left:12px;">';
+        html += '<button class="btn-attr' + (stop1Mode === 'source' ? ' active' : '') + '" onclick="D._setStop1Mode(\'source\')">By Source</button>';
+        html += '<button class="btn-attr' + (stop1Mode === 'campaign' ? ' active' : '') + '" onclick="D._setStop1Mode(\'campaign\')">By Campaign</button>';
+        html += '</div>';
+        html += '<span style="font-size:12px;color:var(--text-dim);margin-left:auto;">'
+             + totalJourneys + ' journeys across ' + rows.length + ' ' + stop1Dim.label.toLowerCase() + 's</span>';
+        html += '</div>';
 
-        const sortIndicator = col =>
-            sortCol === col ? `<span class="sort-indicator">${sortAsc ? '▲' : '▼'}</span>` : '';
-        const sortHeader = (col, label, extraAttrs = '') =>
-            `<th class="sortable${sortCol === col ? ' sorted' : ''}" ${extraAttrs} onclick="D.sortStops('${col}')">${label} ${sortIndicator(col)}</th>`;
+        const maxCount = rows.length ? Math.max(...rows.map(([, d]) => d.count)) : 1;
+        const maxStop2 = rows.length ? Math.max(...rows.map(([, d]) => d.stop2Count), 1) : 1;
+        const maxStop3 = rows.length ? Math.max(...rows.map(([, d]) => d.stop3Count), 1) : 1;
 
-        // Stop 2 / Stop 3 header — the whole cell is clickable and opens the popup.
-        const stopHeader = (num, dim, value) => {
-            const isConfigured = !!dim;
-            const isActive = isConfigured && !!value;
-            const clsList = ['stop-col', 'stop' + num];
-            if (!isConfigured) clsList.push('empty');
-            let inner;
-            if (isActive) {
-                inner = `<span class="stop-header-dim">Stop ${num}: ${esc(dim.label)}</span><span class="stop-header-value" title="${esc(value)}">${esc(value)}</span>`;
-            } else if (isConfigured) {
-                inner = `<span class="stop-header-dim">Stop ${num}: ${esc(dim.label)}</span><span class="stop-header-placeholder">— select value —</span>`;
-            } else {
-                inner = `<span class="stop-header-placeholder">+ Stop ${num}</span>`;
-            }
-            return `<th class="${clsList.join(' ')}" data-stop="${num}" data-stop-header="${num}" onclick="D._toggleStopPopup(${num}, event)"><span class="stop-header-btn">${inner}</span></th>`;
+        const barHtml = (val, max, cls) => {
+            const w = max > 0 ? Math.round((val / max) * 100) : 0;
+            return '<div class="stops-bar ' + cls + '" style="width:' + Math.max(w, 4) + 'px"></div>';
         };
 
-        // ─── HEADER ───────────────────────────────────────────────────────────
-        let html = `
-            <div class="attr-header">
-                <div>
-                    <div class="attr-title">Path Stops — Sequential Journey Analysis</div>
-                    <div class="attr-sub">Group journeys by their first touchpoint, then filter by subsequent stops. Click a row to see matching fingerprints.</div>
-                </div>
-                <div class="attr-meta">
-                    <div class="mode-toggle">
-                        <button type="button" class="btn-attr ${stop1Mode === 'source' ? 'active' : ''}" onclick="D._setStop1Mode('source')">By Source</button>
-                        <button type="button" class="btn-attr ${stop1Mode === 'campaign' ? 'active' : ''}" onclick="D._setStop1Mode('campaign')">By Campaign</button>
-                    </div>
-                    <span class="attr-summary">${totalJourneys.toLocaleString()} journeys across <b>${rows.length}</b> ${esc(stop1Dim.label.toLowerCase())}${rows.length === 1 ? '' : 's'}</span>
-                </div>
-            </div>`;
+        // Clickable header for Stop 2 / Stop 3 (Stop 1 stays as a plain header)
+        const stopHeader = (num, dim, value, placeholder) => {
+            let inner = '';
+            if (dim) {
+                inner = '<span class="stop-header-dim">' + dim.label + '</span>';
+                if (value) {
+                    const esc = String(value).replace(/"/g, '&quot;');
+                    inner += '<span class="stop-header-value" title="' + esc + '">' + value + '</span>';
+                }
+            } else {
+                inner = '<span class="stop-header-placeholder">' + placeholder + '</span>';
+            }
+            return '<th class="stop-header-cell" data-stop="' + num + '" onclick="D._toggleStopPopup(' + num + ', event)">'
+                 + '<span class="stop-header-btn">' + inner + '</span></th>';
+        };
 
-        // ─── TABLE ────────────────────────────────────────────────────────────
-        html += `<table class="tbl" id="stops-table">
-            <thead><tr>
-                <th style="width:40px;"></th>
-                ${sortHeader('name', `Stop 1: ${esc(stop1Dim.label)}`)}
-                ${sortHeader('count', 'Journeys', 'style="width:240px;"')}
-                ${stopHeader(2, stop2Dim, stop2Active ? this._stops.stop2.value : null)}
-                ${stopHeader(3, stop3Dim, stop3Active ? this._stops.stop3.value : null)}
-                ${sortHeader('revenue', 'Revenue', 'style="width:120px;"')}
-            </tr></thead>
-            <tbody>`;
+        const sortArrow = col => sortCol === col ? (sortAsc ? ' ↑' : ' ↓') : '';
+
+        html += '<div style="overflow-x:auto;padding:0 20px 20px;">';
+        html += '<table class="tbl" id="stops-table"><thead><tr>';
+        html += '<th onclick="D.sortStops(\'name\')" style="cursor:pointer;">' + stop1Dim.label + sortArrow('name') + '</th>';
+        html += '<th onclick="D.sortStops(\'count\')" style="cursor:pointer;">Journeys' + sortArrow('count') + '</th>';
+        html += stopHeader(2, stop2Dim, stop2Active ? this._stops.stop2.value : null, '+ STOP 2');
+        if (stop2Active) {
+            html += stopHeader(3, stop3Dim, stop3Active ? this._stops.stop3.value : null, '+ STOP 3');
+        }
+        html += '</tr></thead><tbody>';
 
         rows.forEach(([name, d]) => {
             const isExpanded = this._expandedStopRows.has(name);
+            const expandIcon = isExpanded ? '▾' : '▸';
+            const rowClass = isExpanded ? 'stops-row-expanded' : '';
             const escapedName = name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-            const pct = totalJourneys > 0 ? ((d.count / totalJourneys) * 100).toFixed(1) : '0';
-            const pct2 = d.count > 0 ? ((d.stop2Count / d.count) * 100).toFixed(0) : 0;
-            const pct3 = d.count > 0 ? ((d.stop3Count / d.count) * 100).toFixed(0) : 0;
-            const rev = revByName[name];
-            const revHtml = rev > 0
-                ? `<span class="mono" style="color:var(--green);font-weight:700;">$${rev.toFixed(2)}</span>`
-                : '<span class="dim">—</span>';
 
-            // Stop 1 — source/campaign chip with a colored dot when in source mode.
-            const chipCell = stop1Mode === 'source'
-                ? `<span class="src-chip"><span class="src-dot ${this.canonicalizeSource(name)}"></span><b>${esc(name)}</b></span>`
-                : `<b>${esc(name)}</b>`;
-
-            const stop2Cell = stop2Active
-                ? `<td><div class="stop-cell s2"><div class="bar-track"><div class="bar-fill" style="width:${pct2}%"></div></div><span class="n">${d.stop2Count}</span><span class="pct">${pct2}%</span></div></td>`
-                : `<td><span class="stop-dash dim">—</span></td>`;
-            const stop3Cell = stop3Active
-                ? `<td><div class="stop-cell s3"><div class="bar-track"><div class="bar-fill" style="width:${pct3}%"></div></div><span class="n">${d.stop3Count}</span><span class="pct">${pct3}%</span></div></td>`
-                : `<td><span class="stop-dash dim">—</span></td>`;
-
-            html += `<tr class="stops-row${isExpanded ? ' expanded' : ''}" data-stop-row="${esc(name)}" onclick="D.toggleStopRow('${escapedName}')">
-                <td><span class="expand-caret">▶</span></td>
-                <td>${chipCell}</td>
-                <td><div class="stop-cell"><div class="bar-track"><div class="bar-fill" style="width:${(d.count / maxCount) * 100}%"></div></div><span class="n">${d.count}</span><span class="pct">${pct}%</span></div></td>
-                ${stop2Cell}
-                ${stop3Cell}
-                <td>${revHtml}</td>
-            </tr>`;
+            html += '<tr class="stops-row ' + rowClass + '" onclick="D.toggleStopRow(\'' + escapedName + '\')">';
+            html += '<td class="stops-name-cell"><span style="color:var(--text-dim);font-size:12px;display:inline-block;width:14px;">' + expandIcon + '</span> ' + name + '</td>';
+            html += '<td>' + barHtml(d.count, maxCount, 'stops-bar-1') + '<strong>' + d.count + '</strong></td>';
+            html += '<td>' + (stop2Active ? barHtml(d.stop2Count, maxStop2, 'stops-bar-2') + '<strong>' + d.stop2Count + '</strong>' : '<span style="color:#d1d5db;">—</span>') + '</td>';
+            if (stop2Active) {
+                html += '<td>' + (stop3Active ? barHtml(d.stop3Count, maxStop3, 'stops-bar-3') + '<strong>' + d.stop3Count + '</strong>' : '<span style="color:#d1d5db;">—</span>') + '</td>';
+            }
+            html += '</tr>';
 
             if (isExpanded) {
+                const colSpan = 3 + (stop2Active ? 1 : 0);
                 const activeFps = stop3Active ? d.stop3Fps : stop2Active ? d.stop2Fps : d.fps;
-                html += `<tr class="expand-row"><td colspan="6"><div class="expand-inner">${this._renderStopFingerprints(activeFps, name)}</div></td></tr>`;
+                html += '<tr class="stops-expansion-row"><td colspan="' + colSpan + '">';
+                html += '<div class="stops-expansion-wrap">' + this._renderStopFingerprints(activeFps, name) + '</div>';
+                html += '</td></tr>';
             }
         });
 
-        html += '</tbody></table>';
+        html += '</tbody></table></div>';
+        html += '<div id="stop-popup-portal"></div>';
         container.innerHTML = html;
 
-        // Auto-fit / resize the main table and any expanded fingerprint sub-tables.
+        // Column resize / auto-fit — main table AND drill-down tables
         const table = document.getElementById('stops-table');
         if (table) {
             requestAnimationFrame(() => {
@@ -3031,7 +2380,7 @@ class Dashboard {
                     autoFitColumns(table);
                     makeResizable(table);
                     addColumnHighlight(table);
-                    container.querySelectorAll('.expand-row table.tp-table').forEach(t => {
+                    container.querySelectorAll('.stops-expansion-row table.tp-table').forEach(t => {
                         autoFitColumns(t);
                         makeResizable(t);
                         addColumnHighlight(t);
@@ -3040,29 +2389,20 @@ class Dashboard {
             });
         }
 
-        // Stop 2 / Stop 3 popup — rendered into the body-level portal with fixed positioning.
-        this._renderActiveStopPopup();
-    }
-
-    // Places the active stop popup below its header cell using viewport-absolute (fixed) coords.
-    _renderActiveStopPopup() {
-        const portalEl = document.getElementById('stop-popup-portal');
-        if (!portalEl) return;
-        if (!this._activeStopPopup || this._activeStopPopup === 1) {
-            portalEl.innerHTML = '';
-            portalEl.style.display = 'none';
-            return;
+        // Render an open stop popup in the portal (Stop 2 or Stop 3 only)
+        if (this._activeStopPopup && this._activeStopPopup !== 1) {
+            const portalEl = document.getElementById('stop-popup-portal');
+            const headerCell = document.querySelector('.stop-header-cell[data-stop="' + this._activeStopPopup + '"]');
+            if (portalEl && headerCell) {
+                const rect = headerCell.getBoundingClientRect();
+                const containerRect = container.getBoundingClientRect();
+                portalEl.innerHTML = this._renderStopPopup(this._activeStopPopup);
+                portalEl.style.position = 'absolute';
+                portalEl.style.left = (rect.left - containerRect.left) + 'px';
+                portalEl.style.top = (rect.bottom - containerRect.top + 4) + 'px';
+                portalEl.style.zIndex = '200';
+            }
         }
-        const headerCell = document.querySelector('.stop-col[data-stop="' + this._activeStopPopup + '"]');
-        if (!headerCell) { portalEl.innerHTML = ''; portalEl.style.display = 'none'; return; }
-
-        const rect = headerCell.getBoundingClientRect();
-        portalEl.innerHTML = this._renderStopPopup(this._activeStopPopup);
-        portalEl.style.display = '';
-        portalEl.style.position = 'fixed';
-        portalEl.style.left = rect.left + 'px';
-        portalEl.style.top = (rect.bottom + 4) + 'px';
-        portalEl.style.zIndex = '200';
     }
 
     // Compact touchpoint table shared by order detail and journey path panels
@@ -3071,110 +2411,42 @@ class Dashboard {
             const journey = this.journeys.find(j => j.fp === fp);
             firstOrderTs = journey ? journey.firstOrderTs : null;
         }
-        const esc = this._escHtml.bind(this);
-        const dimOr = (v) => v ? esc(v) : '<span class="dim">—</span>';
-        const monoDim = (v) => v ? `<span class="mono dim">${esc(v)}</span>` : '<span class="dim">—</span>';
-
         let html = `<div style="overflow-x:auto;">
             <table class="tp-table">
                 <thead><tr>
-                    <th>#</th><th>Type</th><th>Conv. Type</th><th>Date</th>
-                    <th>Source</th><th>Ad Campaign</th><th>Ref. Campaign</th>
-                    <th>Ad Group</th><th>Creative</th><th>Sub5</th><th>Sub6</th>
-                    <th>Device</th><th>Browser</th><th>OS</th>
-                    <th>State</th><th>City</th><th>IP</th>
-                    <th>Order</th><th>Customer</th>
-                    <th>Payout</th><th>Value</th><th>Status</th>
-                </tr></thead><tbody>`;
+                    <th>#</th><th>Type</th><th>Conv. Type</th><th>Date</th><th>Source</th><th>Ad Campaign</th><th>Ref. Campaign</th>
+                    <th>Ad Group</th><th>Creative</th><th>Sub5</th><th>Sub6</th><th>Device</th><th>Browser</th><th>OS</th>
+                        <th>State</th><th>City</th><th>IP</th>
+                        <th>Order</th><th>Customer</th><th>Payout</th><th>Value</th><th>Status</th>
+                    </tr></thead><tbody>`;
 
         touchpoints.forEach((r, i) => {
+            const type = r.t === 'c' ? 'click' : r.t === 'v' ? 'conv' : 'order';
             const phase = this.classifyTouchpoint(r, firstOrderTs);
-            const isSub = this.isSubscription(r);
-            const isSubAct = this.isSubscriptionAction(r);
+            const phaseRowCls = phase === 'first' ? ' first-purchase-row' : phase === 'pre' ? ' pre-purchase-row' : '';
+            const purchaseExtra = (r.t === 'o' && phase === 'first') ? ' <span class="first-purchase-badge">★ 1st</span>' : '';
 
-            // v2 row modifiers: .pre (before first purchase), .first (the first-purchase row),
-            // .muted (recurring/shipping sub-actions). We also keep the legacy row classes
-            // so the shim CSS still styles any non-re-skinned tables uniformly.
-            const rowClasses = [
-                r.t === 'c' ? 'click' : r.t === 'v' ? 'conv' : 'order',
-                isSub ? 'subscription-row' : '',
-                phase === 'first' ? 'first first-purchase-row' : '',
-                phase === 'pre'   ? 'pre pre-purchase-row' : '',
-                isSubAct ? 'muted sub-action-row' : '',
-            ].filter(Boolean).join(' ');
-
-            let typeBadge;
-            if (r.t === 'c')      typeBadge = '<span class="badge click">CLICK</span>';
-            else if (r.t === 'v') typeBadge = '<span class="badge action">ACTION</span>';
-            else                  typeBadge = isSub
-                ? '<span class="badge subscription">SUB</span>'
-                : '<span class="badge purchase">PURCHASE</span>';
-            const firstBadge = (r.t === 'o' && phase === 'first')
-                ? ' <span class="first-purchase-badge">★ 1st</span>'
-                : '';
-
-            const vtCell = r.vt
-                ? `<b style="color:var(--orange)">${esc(r.vt)}</b>`
-                : '<span class="dim">—</span>';
-
-            const source = r.src || r.fsrc || '';
-            const srcCell = source
-                ? `<span class="src-chip"><span class="src-dot ${this.canonicalizeSource(source)}"></span>${esc(source)}</span>`
-                : '<span class="dim">—</span>';
-
-            const adGroup = r.adg || r.s1 || '';
+            const typeBadge = r.t === 'c' ? '<span class="badge badge-blue">CLICK</span>'
+                : r.t === 'v' ? '<span class="badge badge-orange">ACTION</span>'
+                : (this.isSubscription(r) ? '<span class="badge badge-subscription">SUBSCRIPTION</span>' : '<span class="badge badge-green">PURCHASE</span>');
             const ip = r.click_ip || r.conversion_ip || r.order_ip || r.ip || '';
+            const payout = r.t === 'v' && r.pay != null && r.pay !== '' ? `$${Number(r.pay).toFixed(2)}` : '';
+            const value = r.t === 'o' && r.pr != null && r.pr !== '' ? `$${Number(r.pr).toFixed(2)}` : '';
+            const stBadge = r.t === 'o' ? (() => { const b = r.st === 'FULFILLED' ? 'badge-green' : r.st === 'PENDING' ? 'badge-orange' : 'badge-grey'; return `<span class="badge ${b}">${r.st || 'N/A'}</span>`; })() : '';
+            const source = r.src || r.fsrc || '';
+            const adGroup = r.adg || r.s1 || '';
+            const oidLink = r.oid ? `<a class="xlink" onclick="event.stopPropagation();D.navigateToOrder('${r.oid}')">#${r.oid}</a>` : '';
+            const custLink = r.nm ? (r.cid ? `<a class="xlink" onclick="event.stopPropagation();D.navigateToCustomer('${r.cid}')">${r.nm}</a>` : r.nm) : '';
 
-            const payout = (r.t === 'v' && r.pay != null && r.pay !== '')
-                ? `<span class="mono" style="color:var(--orange);font-weight:600;">$${Number(r.pay).toFixed(2)}</span>`
-                : '<span class="dim">—</span>';
-            const value = (r.t === 'o' && r.pr != null && r.pr !== '')
-                ? `<span class="mono" style="color:var(--green);font-weight:700;">$${Number(r.pr).toFixed(2)}</span>`
-                : '<span class="dim">—</span>';
-
-            let stBadge;
-            if (r.t !== 'o' || !r.st) {
-                stBadge = '<span class="dim">—</span>';
-            } else {
-                const s = String(r.st).toUpperCase();
-                const variant = s === 'FULFILLED' ? 'purchase'
-                             : s === 'PENDING'    ? 'action'
-                             : 'subscription';
-                stBadge = `<span class="badge ${variant}">${esc(r.st)}</span>`;
-            }
-
-            const oidLink = r.oid
-                ? `<a class="xlink mono" onclick="event.stopPropagation();D.navigateToOrder('${r.oid}')">#${esc(r.oid)}</a>`
-                : '<span class="dim">—</span>';
-            const custLink = r.nm
-                ? (r.cid
-                    ? `<a class="xlink" onclick="event.stopPropagation();D.navigateToCustomer('${r.cid}')">${esc(r.nm)}</a>`
-                    : esc(r.nm))
-                : '<span class="dim">—</span>';
-
-            html += `<tr class="${rowClasses}" style="cursor:pointer;" onclick="D.showTouchpoint('${fp}',${i})">
-                <td class="dim">${i + 1}</td>
-                <td>${typeBadge}${firstBadge}</td>
-                <td>${vtCell}</td>
-                <td class="mono dim" style="white-space:nowrap;">${esc(this.fmtDate(r.dt))}</td>
-                <td>${srcCell}</td>
-                <td>${dimOr(r.cmp)}</td>
-                <td>${dimOr(r.rcmp)}</td>
-                <td>${dimOr(adGroup)}</td>
-                <td>${monoDim(r.s4)}</td>
-                <td>${monoDim(r.s5)}</td>
-                <td>${monoDim(r.s6)}</td>
-                <td>${dimOr(r.dev)}</td>
-                <td>${dimOr(r.br)}</td>
-                <td>${dimOr(r.os)}</td>
-                <td>${dimOr(r.co)}</td>
-                <td>${dimOr(r.ci)}</td>
-                <td>${monoDim(ip)}</td>
-                <td>${oidLink}</td>
-                <td>${custLink}</td>
-                <td>${payout}</td>
-                <td>${value}</td>
-                <td>${stBadge}</td>
+            const subActRowCls = this.isSubscriptionAction(r) ? ' sub-action-row' : '';
+            html += `<tr class="${type}${this.isSubscription(r) ? ' subscription-row' : ''}${phaseRowCls}${subActRowCls}" style="cursor:pointer;" onclick="D.showTouchpoint('${fp}',${i})">
+                <td>${i + 1}</td><td>${typeBadge}${purchaseExtra}</td><td>${r.vt || ''}</td><td style="white-space:nowrap;">${this.fmtDate(r.dt)}</td>
+                <td>${source}</td><td>${r.cmp || ''}</td><td>${r.rcmp || ''}</td><td>${adGroup}</td>
+                <td>${r.s4 || ''}</td><td>${r.s5 || ''}</td><td>${r.s6 || ''}</td>
+                <td>${r.dev || ''}</td><td>${r.br || ''}</td><td>${r.os || ''}</td>
+                <td>${r.co || ''}</td><td>${r.ci || ''}</td><td>${ip}</td>
+                <td>${oidLink}</td><td>${custLink}</td>
+                <td>${payout}</td><td>${value}</td><td>${stBadge}</td>
             </tr>`;
         });
 
@@ -3301,11 +2573,10 @@ class Dashboard {
                 container.removeEventListener('transitionend', handler);
             });
         }
-        const bd = document.getElementById('backdrop');
-        if (bd) bd.classList.remove('open');
-        document.body.classList.remove('no-scroll');
+        this._showActiveTabBody();
         const tab = this._currentTab || 'route';
         this._panelStates[tab] = { history: [], current: null, scrollTop: 0 };
+        this.renderTab();
     }
 }
 
@@ -3474,11 +2745,10 @@ function makeContainerResizable(containerId) {
     });
 }
 
-// Auto-fits columns + adds resize handles to all tables inside the detail panel.
-// Supports both the legacy `.detail-content` wrapper and the v2 `.panel-body` layout.
+// Auto-fits columns + adds resize handles to all tables inside the detail panel
 function makePanelResizable() {
     const container = document.getElementById('detail-container');
-    const el = container ? (container.querySelector('.panel-body') || container.querySelector('.detail-content')) : null;
+    const el = container ? container.querySelector('.detail-content') : null;
     if(!el) return;
     requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -3489,175 +2759,6 @@ function makePanelResizable() {
             });
         });
     });
-}
-
-// ═══════════════════════════════════════════
-// Custom dropdown system (cc-wrap / cc-popover) — Phase 13
-// Enhances every native <select> with a styled trigger + popover,
-// while keeping the underlying <select> authoritative (so existing
-// onchange handlers fire normally).
-// ═══════════════════════════════════════════
-const CC_SOURCE_COLORS = {
-    Facebook: '#3c6ec9',
-    Google:   '#15aa6a',
-    Tiktok:   '#222',
-    Organic:  '#7a8e2a',
-    Direct:   '#a15fd6',
-    Email:    '#e07a2a',
-    Bing:     '#d0a30c',
-    Any:      'transparent',
-};
-
-let _ccOpen = null;
-
-function enhanceSelects(root) {
-    ccClose();
-    const scope = root || document;
-    scope.querySelectorAll('select').forEach(sel => {
-        if (sel.dataset.ccEnhanced === '1') return;
-        sel.dataset.ccEnhanced = '1';
-
-        const parent = sel.parentNode;
-        const wrap = document.createElement('span');
-        wrap.className = 'cc-wrap';
-        parent.insertBefore(wrap, sel);
-        wrap.appendChild(sel);
-        sel.classList.add('cc-native');
-
-        const trigger = document.createElement('button');
-        trigger.type = 'button';
-        trigger.className = 'cc-trigger';
-        if (sel.classList.contains('filter-select')) trigger.classList.add('cc-filter');
-        trigger.setAttribute('aria-haspopup', 'listbox');
-        trigger.setAttribute('aria-expanded', 'false');
-        trigger.innerHTML = `<span class="cc-label"></span><svg class="cc-caret" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 4 L5 7 L8 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-        wrap.appendChild(trigger);
-
-        const syncLabel = () => {
-            const opt = sel.options[sel.selectedIndex];
-            const label = trigger.querySelector('.cc-label');
-            if (label) label.textContent = opt ? opt.textContent : '';
-        };
-        syncLabel();
-        sel._ccSync = syncLabel;
-
-        trigger.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (trigger.getAttribute('aria-expanded') === 'true') { ccClose(); return; }
-            ccOpen(sel, trigger);
-        });
-        trigger.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                ccOpen(sel, trigger);
-            }
-        });
-    });
-}
-
-function ccOpen(sel, trigger) {
-    ccClose();
-    const escHtml = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-    const pop = document.createElement('div');
-    pop.className = 'cc-popover';
-
-    // Heuristic: if any option text matches a known source name, treat this as a source select.
-    const isSource = Array.from(sel.options).some(o => CC_SOURCE_COLORS[o.textContent] !== undefined && ['Facebook','Google','Tiktok','Bing','Email','Organic','Direct'].includes(o.textContent));
-
-    const opts = Array.from(sel.options).map((o, i) => {
-        const txt = o.textContent;
-        const selected = o.selected;
-        let dot = '';
-        if (isSource && CC_SOURCE_COLORS[txt]) {
-            dot = `<span class="cc-dot" style="background:${CC_SOURCE_COLORS[txt]}"></span>`;
-        }
-        return `<div class="cc-option${selected ? ' cc-selected' : ''}" data-idx="${i}" role="option">${dot}${escHtml(txt)}</div>`;
-    }).join('');
-    pop.innerHTML = opts;
-    document.body.appendChild(pop);
-
-    const r = trigger.getBoundingClientRect();
-    const minW = Math.max(r.width, 160);
-    pop.style.setProperty('--cc-min-width', minW + 'px');
-    pop.style.left = r.left + 'px';
-    pop.style.top = (r.bottom + 4) + 'px';
-    pop.classList.add('open');
-    requestAnimationFrame(() => {
-        const pr = pop.getBoundingClientRect();
-        if (pr.right > window.innerWidth - 8) {
-            pop.style.left = Math.max(8, window.innerWidth - pr.width - 8) + 'px';
-        }
-        if (pr.bottom > window.innerHeight - 8) {
-            pop.style.top = (r.top - pr.height - 4) + 'px';
-        }
-    });
-
-    trigger.setAttribute('aria-expanded', 'true');
-
-    let focusIdx = Math.max(0, sel.selectedIndex);
-    const updateFocus = () => {
-        pop.querySelectorAll('.cc-option').forEach((el, i) => {
-            el.classList.toggle('cc-focused', i === focusIdx);
-        });
-    };
-    updateFocus();
-
-    const commit = (idx) => {
-        sel.selectedIndex = idx;
-        if (sel._ccSync) sel._ccSync();
-        sel.dispatchEvent(new Event('change', { bubbles: true }));
-        ccClose();
-    };
-
-    pop.addEventListener('click', (e) => {
-        const opt = e.target.closest('.cc-option');
-        if (!opt) return;
-        commit(parseInt(opt.dataset.idx, 10));
-    });
-    pop.addEventListener('mousemove', (e) => {
-        const opt = e.target.closest('.cc-option');
-        if (!opt) return;
-        focusIdx = parseInt(opt.dataset.idx, 10);
-        updateFocus();
-    });
-
-    const onKey = (e) => {
-        if (e.key === 'Escape') { ccClose(); trigger.focus(); }
-        else if (e.key === 'ArrowDown') { e.preventDefault(); focusIdx = Math.min(sel.options.length - 1, focusIdx + 1); updateFocus(); }
-        else if (e.key === 'ArrowUp') { e.preventDefault(); focusIdx = Math.max(0, focusIdx - 1); updateFocus(); }
-        else if (e.key === 'Enter') { e.preventDefault(); commit(focusIdx); }
-    };
-    const onDoc = (e) => {
-        if (!pop.contains(e.target) && e.target !== trigger) ccClose();
-    };
-    const onScroll = (e) => {
-        if (pop.contains(e.target)) return;
-        ccClose();
-    };
-    document.addEventListener('keydown', onKey);
-    document.addEventListener('mousedown', onDoc, true);
-    window.addEventListener('resize', ccClose);
-    window.addEventListener('scroll', onScroll, true);
-
-    _ccOpen = { pop, trigger, onKey, onDoc, onScroll };
-}
-
-function ccClose() {
-    if (!_ccOpen) return;
-    const { pop, trigger, onKey, onDoc, onScroll } = _ccOpen;
-    document.removeEventListener('keydown', onKey);
-    document.removeEventListener('mousedown', onDoc, true);
-    window.removeEventListener('resize', ccClose);
-    window.removeEventListener('scroll', onScroll, true);
-    if (trigger) trigger.setAttribute('aria-expanded', 'false');
-    if (pop && pop.parentNode) pop.parentNode.removeChild(pop);
-    _ccOpen = null;
-}
-
-// Expose on Dashboard for `this.enhanceSelects()` convenience
-if (typeof Dashboard !== 'undefined') {
-    Dashboard.prototype.enhanceSelects = function () { enhanceSelects(); };
 }
 
 // ═══════════════════════════════════════════

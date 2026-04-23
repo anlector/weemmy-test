@@ -1,0 +1,344 @@
+<!DOCTYPE html><html lang="en" data-theme="dark" style="--teal: #007892; --teal-08: rgba(0,120,146,0.08); --teal-12: rgba(0,120,146,0.12); --teal-18: rgba(0,120,146,0.18); --teal-35: rgba(0,120,146,0.35);"><head>
+
+
+<meta charset="UTF-8">
+<title>WEEM · Customer Journey Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css?v=14">
+<link rel="stylesheet" href="datepicker.css?v=1">
+</head>
+<body data-new-gr-c-s-check-loaded="14.1285.0" data-gr-ext-installed="" style="font-size: 13px; cursor: crosshair;" data-cc-id="cc-1" data-new-gr-c-s-loaded="14.1285.0">
+    <div class="app">
+      
+  <header class="mgmt">
+    <div class="brand">
+      <div class="brand-logo">W</div>
+      <div>WEEM <span class="brand-sub">Customer Journey</span></div>
+    </div>
+    <div class="mgmt-fields">
+      
+    <div class="mgmt-field">
+      <label>Date range</label>
+      <button type="button" class="dr-pill" id="dr-trigger-pill">
+        <svg class="dr-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"></rect><path d="M2.5 6.5 L13.5 6.5 M5 2 L5 5 M11 2 L11 5"></path></svg>
+        <span>04/01/2026</span>
+        <span class="dr-sep">→</span>
+        <span>04/21/2026</span>
+        <svg class="dr-caret" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 4 L5 7 L8 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      </button>
+    </div>
+      <div class="mgmt-field" style="flex:1;">
+        <label>Search</label>
+        <input class="mgmt-input search" placeholder="email, IP, fingerprint, order ID…">
+      </div>
+    </div>
+    <div class="mgmt-actions">
+      <button class="theme-toggle" data-action="toggle-theme" title="Toggle dark mode" aria-label="Toggle dark mode">
+        <svg class="theme-icon theme-icon-light" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="4"></circle>
+          <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path>
+        </svg>
+        <svg class="theme-icon theme-icon-dark" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"></path>
+        </svg>
+      </button>
+      <div class="user-chip">
+        <div class="avatar">AN</div>
+        Andrii
+      </div>
+    </div>
+  </header>
+      
+  <div class="tabs-wrap">
+    
+    <button class="tab " data-tab="stops">
+      Path Stops <span class="count">12</span>
+    </button>
+    
+    <button class="tab " data-tab="paths">
+      Journey Paths <span class="count">12</span>
+    </button>
+    
+    <button class="tab active" data-tab="orders">
+      Orders <span class="count">12</span>
+    </button>
+    
+    <button class="tab " data-tab="customers">
+      Customers <span class="count">7</span>
+    </button>
+    <div class="tabs-right">
+      <button class="btn btn-ghost" data-action="toggle-funnel">
+        ▸ Show Conversion Funnel
+      </button>
+    </div>
+  </div>
+      
+  <div class="filter-bar">
+    
+    <div class="filter-row">
+      <span class="logic first">WHERE</span>
+      <span class="cc-wrap"><select class="filter-select cc-native" data-filter-field="0" data-cc-enhanced="1">
+        <option value="firstSource" selected="">First Source</option><option value="subsequentSource">Subsequent Source</option><option value="cmp">Ad Campaign</option><option value="rcmp">Ref. Campaign</option><option value="dev">Device</option><option value="co">State</option><option value="hasOrder">Has Order</option>
+      </select><button type="button" class="cc-trigger cc-filter" aria-haspopup="listbox" aria-expanded="false"><span class="cc-label">First Source</span><svg class="cc-caret" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 4 L5 7 L8 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></button></span>
+      <span class="cc-wrap"><select class="filter-select cc-native" data-filter-op="0" data-cc-enhanced="1">
+        <option selected="">is</option>
+        <option>is not</option>
+        <option>contains</option>
+      </select><button type="button" class="cc-trigger cc-filter" aria-haspopup="listbox" aria-expanded="false"><span class="cc-label">is</span><svg class="cc-caret" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 4 L5 7 L8 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></button></span>
+      <span class="cc-wrap"><select class="filter-select cc-native" data-filter-value="0" data-cc-enhanced="1">
+        <option selected="">Any</option><option>Facebook</option><option>Google</option><option>Tiktok</option><option>Organic</option><option>Direct</option><option>Email</option><option>Bing</option>
+      </select><button type="button" class="cc-trigger cc-filter" aria-haspopup="listbox" aria-expanded="false"><span class="cc-label">Any</span><svg class="cc-caret" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 4 L5 7 L8 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></button></span>
+      <button class="filter-remove" data-filter-remove="0" title="Remove">×</button>
+    </div>
+  
+    <div class="filter-row">
+      <span class="logic ">AND</span>
+      <span class="cc-wrap"><select class="filter-select cc-native" data-filter-field="1" data-cc-enhanced="1">
+        <option value="firstSource" selected="">First Source</option><option value="subsequentSource">Subsequent Source</option><option value="cmp">Ad Campaign</option><option value="rcmp">Ref. Campaign</option><option value="dev">Device</option><option value="co">State</option><option value="hasOrder">Has Order</option>
+      </select><button type="button" class="cc-trigger cc-filter" aria-haspopup="listbox" aria-expanded="false"><span class="cc-label">First Source</span><svg class="cc-caret" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 4 L5 7 L8 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></button></span>
+      <span class="cc-wrap"><select class="filter-select cc-native" data-filter-op="1" data-cc-enhanced="1">
+        <option selected="">is</option>
+        <option>is not</option>
+        <option>contains</option>
+      </select><button type="button" class="cc-trigger cc-filter" aria-haspopup="listbox" aria-expanded="false"><span class="cc-label">is</span><svg class="cc-caret" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 4 L5 7 L8 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></button></span>
+      <span class="cc-wrap"><select class="filter-select cc-native" data-filter-value="1" data-cc-enhanced="1">
+        <option selected="">Any</option><option>Facebook</option><option>Google</option><option>Tiktok</option><option>Organic</option><option>Direct</option><option>Email</option><option>Bing</option>
+      </select><button type="button" class="cc-trigger cc-filter" aria-haspopup="listbox" aria-expanded="false"><span class="cc-label">Any</span><svg class="cc-caret" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 4 L5 7 L8 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></button></span>
+      <button class="filter-remove" data-filter-remove="1" title="Remove">×</button>
+    </div>
+  
+    <div class="filter-actions-row">
+      <button class="btn btn-primary btn-apply" data-action="apply-filters">Apply filters</button>
+      <button class="btn btn-ghost" data-action="clear-filters">Clear</button>
+      <button class="btn btn-ghost dashed" data-action="add-filter">+ Add filter</button>
+      <span class="filter-hint">AND logic. Apply to update the list.</span>
+    </div>
+  </div>
+      
+      <div class="dash" id="dash">
+        
+    <div class="sort-bar">
+      <span class="results"><b>12</b> orders</span>
+      <span class="sep"></span>
+      <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+        <input type="checkbox"> <span>Hide subscriptions</span>
+      </label>
+    </div>
+    <table class="tbl">
+      <thead><tr>
+        <th class="sortable sorted">Date ▼</th>
+        <th>Order ID</th>
+        <th>Customer</th>
+        <th>Source</th>
+        <th>Ref. Campaign</th>
+        <th>App</th>
+        <th>State</th>
+        <th class="sortable">Value</th>
+        <th>Status</th>
+        <th>Fingerprint</th>
+      </tr></thead>
+      <tbody>
+        
+          <tr data-order="#WEEM-236858">
+            <td class="mono dim">04/20/2026 20:36</td>
+            <td><a class="xlink mono">#WEEM-236858</a></td>
+            <td><a class="xlink" data-cust="6832450110">Priya Walker</a></td>
+            <td><span class="src-chip"><span class="src-dot organic"></span>Organic</span></td>
+            <td>Email - Subscriber reactivation</td>
+            <td><span class="badge subscription">SUBSCRIPTION</span></td>
+            <td>MA</td>
+            <td class="mono" style="color:var(--green);font-weight:700;">$34.95</td>
+            <td><span class="badge purchase">FULFILLED</span></td>
+            <td><a class="xlink mono" data-fp="rjuvabk42pwos6oh">rjuvabk42p…</a></td>
+          </tr>
+        
+          <tr data-order="#WEEM-745423">
+            <td class="mono dim">04/18/2026 20:37</td>
+            <td><a class="xlink mono">#WEEM-745423</a></td>
+            <td><a class="xlink" data-cust="6804120088">Monica Patel</a></td>
+            <td><span class="src-chip"><span class="src-dot email"></span>Email</span></td>
+            <td>Email - Subscriber reactivation</td>
+            <td><span class="badge subscription">SUBSCRIPTION</span></td>
+            <td>WA</td>
+            <td class="mono" style="color:var(--green);font-weight:700;">$39.95</td>
+            <td><span class="badge purchase">FULFILLED</span></td>
+            <td><a class="xlink mono" data-fp="xkww1wg318wrk6tj">xkww1wg318…</a></td>
+          </tr>
+        
+          <tr data-order="#WEEM-340046">
+            <td class="mono dim">04/17/2026 22:03</td>
+            <td><a class="xlink mono">#WEEM-340046</a></td>
+            <td><a class="xlink" data-cust="6812340022">Olivia Kim</a></td>
+            <td><span class="src-chip"><span class="src-dot google"></span>Google</span></td>
+            <td>Organic Referral</td>
+            <td>Online Store</td>
+            <td>NY</td>
+            <td class="mono" style="color:var(--green);font-weight:700;">$74.90</td>
+            <td><span class="badge purchase">FULFILLED</span></td>
+            <td><a class="xlink mono" data-fp="eoxnlit9ql0h1n07">eoxnlit9ql…</a></td>
+          </tr>
+        
+          <tr data-order="#WEEM-354420">
+            <td class="mono dim">04/17/2026 03:53</td>
+            <td><a class="xlink mono">#WEEM-354420</a></td>
+            <td><a class="xlink" data-cust="6848560122">Hannah Lee</a></td>
+            <td><span class="src-chip"><span class="src-dot facebook"></span>Facebook</span></td>
+            <td>Organic Referral</td>
+            <td>Online Store</td>
+            <td>NC</td>
+            <td class="mono" style="color:var(--green);font-weight:700;">$29.95</td>
+            <td><span class="badge purchase">FULFILLED</span></td>
+            <td><a class="xlink mono" data-fp="i5bl0igfwykqcg4g">i5bl0igfwy…</a></td>
+          </tr>
+        
+          <tr data-order="#WEEM-643139">
+            <td class="mono dim">04/16/2026 20:39</td>
+            <td><a class="xlink mono">#WEEM-643139</a></td>
+            <td><a class="xlink" data-cust="6832450110">Priya Walker</a></td>
+            <td><span class="src-chip"><span class="src-dot organic"></span>Organic</span></td>
+            <td>Organic Referral</td>
+            <td>Online Store</td>
+            <td>MA</td>
+            <td class="mono" style="color:var(--green);font-weight:700;">$34.95</td>
+            <td><span class="badge purchase">FULFILLED</span></td>
+            <td><a class="xlink mono" data-fp="rjuvabk42pwos6oh">rjuvabk42p…</a></td>
+          </tr>
+        
+          <tr data-order="#WEEM-906346">
+            <td class="mono dim">04/14/2026 01:38</td>
+            <td><a class="xlink mono">#WEEM-906346</a></td>
+            <td><a class="xlink" data-cust="6821340099">Brittany Hall</a></td>
+            <td><span class="src-chip"><span class="src-dot google"></span>Google</span></td>
+            <td>PMAX campaign to WEEM Branded</td>
+            <td>Online Store</td>
+            <td>GA</td>
+            <td class="mono" style="color:var(--green);font-weight:700;">$19.95</td>
+            <td><span class="badge purchase">FULFILLED</span></td>
+            <td><a class="xlink mono" data-fp="um2dgz8glxhcr4ea">um2dgz8glx…</a></td>
+          </tr>
+        
+          <tr data-order="#WEEM-814041">
+            <td class="mono dim">04/14/2026 00:25</td>
+            <td><a class="xlink mono">#WEEM-814041</a></td>
+            <td><a class="xlink" data-cust="6821340099">Brittany Hall</a></td>
+            <td><span class="src-chip"><span class="src-dot google"></span>Google</span></td>
+            <td>Organic Referral</td>
+            <td>Online Store</td>
+            <td>GA</td>
+            <td class="mono" style="color:var(--green);font-weight:700;">$54.95</td>
+            <td><span class="badge purchase">FULFILLED</span></td>
+            <td><a class="xlink mono" data-fp="um2dgz8glxhcr4ea">um2dgz8glx…</a></td>
+          </tr>
+        
+          <tr data-order="#WEEM-293935">
+            <td class="mono dim">04/12/2026 00:10</td>
+            <td><a class="xlink mono">#WEEM-293935</a></td>
+            <td><a class="xlink" data-cust="6791230045">Stephanie Miller</a></td>
+            <td><span class="src-chip"><span class="src-dot direct"></span>Direct</span></td>
+            <td>Email - Subscriber reactivation</td>
+            <td>Online Store</td>
+            <td>CO</td>
+            <td class="mono" style="color:var(--green);font-weight:700;">$89.95</td>
+            <td><span class="badge purchase">FULFILLED</span></td>
+            <td><a class="xlink mono" data-fp="6j36tpd4thv67ppt">6j36tpd4th…</a></td>
+          </tr>
+        
+          <tr data-order="#WEEM-450093">
+            <td class="mono dim">04/08/2026 21:58</td>
+            <td><a class="xlink mono">#WEEM-450093</a></td>
+            <td><a class="xlink" data-cust="6804120088">Monica Patel</a></td>
+            <td><span class="src-chip"><span class="src-dot email"></span>Email</span></td>
+            <td>PMAX campaign to WEEM Branded</td>
+            <td><span class="badge subscription">SUBSCRIPTION</span></td>
+            <td>WA</td>
+            <td class="mono" style="color:var(--green);font-weight:700;">$39.95</td>
+            <td><span class="badge purchase">FULFILLED</span></td>
+            <td><a class="xlink mono" data-fp="xkww1wg318wrk6tj">xkww1wg318…</a></td>
+          </tr>
+        
+          <tr data-order="#WEEM-633290">
+            <td class="mono dim">04/03/2026 20:32</td>
+            <td><a class="xlink mono">#WEEM-633290</a></td>
+            <td><a class="xlink" data-cust="6812340011">Karen Chamberlain</a></td>
+            <td><span class="src-chip"><span class="src-dot facebook"></span>Facebook</span></td>
+            <td>FB Traffic to Shopify</td>
+            <td><span class="badge subscription">SUBSCRIPTION</span></td>
+            <td>CA</td>
+            <td class="mono" style="color:var(--green);font-weight:700;">$29.95</td>
+            <td><span class="badge purchase">FULFILLED</span></td>
+            <td><a class="xlink mono" data-fp="b4vy7aecw4m907y4">b4vy7aecw4…</a></td>
+          </tr>
+        
+          <tr data-order="#WEEM-772384">
+            <td class="mono dim">04/02/2026 14:05</td>
+            <td><a class="xlink mono">#WEEM-772384</a></td>
+            <td><a class="xlink" data-cust="6812340011">Karen Chamberlain</a></td>
+            <td><span class="src-chip"><span class="src-dot facebook"></span>Facebook</span></td>
+            <td>PMAX campaign to WEEM Branded</td>
+            <td>Online Store</td>
+            <td>CA</td>
+            <td class="mono" style="color:var(--green);font-weight:700;">$49.95</td>
+            <td><span class="badge purchase">FULFILLED</span></td>
+            <td><a class="xlink mono" data-fp="b4vy7aecw4m907y4">b4vy7aecw4…</a></td>
+          </tr>
+        
+          <tr data-order="#WEEM-847644">
+            <td class="mono dim">03/29/2026 20:20</td>
+            <td><a class="xlink mono">#WEEM-847644</a></td>
+            <td><a class="xlink" data-cust="6804120088">Monica Patel</a></td>
+            <td><span class="src-chip"><span class="src-dot email"></span>Email</span></td>
+            <td>Organic Referral</td>
+            <td>Online Store</td>
+            <td>WA</td>
+            <td class="mono" style="color:var(--green);font-weight:700;">$39.95</td>
+            <td><span class="badge purchase">FULFILLED</span></td>
+            <td><a class="xlink mono" data-fp="xkww1wg318wrk6tj">xkww1wg318…</a></td>
+          </tr>
+        
+      </tbody>
+    </table>
+  
+      </div>
+    </div>
+    <div id="backdrop" class=""></div>
+    <div id="detail-container" class="">
+      
+    </div>
+    
+    <div id="tweaks" class="open">
+      <h4>Tweaks</h4>
+      <div class="tweak">
+        <label>Density</label>
+        <span class="cc-wrap"><select id="tw-density" data-cc-enhanced="1" class="cc-native">
+          <option value="comfortable" selected="">Comfortable</option>
+          <option value="compact">Compact</option>
+        </select><button type="button" class="cc-trigger" aria-haspopup="listbox" aria-expanded="false"><span class="cc-label">Comfortable</span><svg class="cc-caret" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 4 L5 7 L8 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></button></span>
+      </div>
+      <div class="tweak">
+        <label>Primary color</label>
+        <input type="color" id="tw-color" value="#007892">
+      </div>
+      <div class="tweak">
+        <label>Show funnel by default</label>
+        <label class="switch"><input type="checkbox" id="tw-funnel"><span class="slider"></span></label>
+      </div>
+      <div class="tweak">
+        <label>Show WEEM logo mark</label>
+        <label class="switch"><input type="checkbox" id="tw-logo" checked=""><span class="slider"></span></label>
+      </div>
+      <div class="tweak">
+        <label>Date picker style</label>
+        <span class="cc-wrap"><select id="tw-date-style" data-cc-enhanced="1" class="cc-native">
+          <option value="pill" selected="">Merged pill</option>
+          <option value="split">Split From / To</option>
+        </select><button type="button" class="cc-trigger" aria-haspopup="listbox" aria-expanded="false"><span class="cc-label">Merged pill</span><svg class="cc-caret" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 4 L5 7 L8 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></button></span>
+      </div>
+    </div>
+  
+    <div id="stop-popup-portal"></div>
+    <script src="data.js?v=12"></script>
+    <script src="datepicker.js?v=1"></script>
+    <script src="app.js?v=12"></script>
+  </body><grammarly-desktop-integration data-grammarly-shadow-root="true"></grammarly-desktop-integration></html>

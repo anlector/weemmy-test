@@ -276,23 +276,15 @@ input, select { font-family: inherit; font-size: inherit; color: inherit; }
 .filter-bar {
   background: var(--surface-2);
   border-bottom: 1px solid var(--border);
-  padding: 14px 20px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-/* `#tab-filters-rows` is a plain <div> holding the stacked .filter-row
-   siblings. Use a column flex with gap so each WHERE/AND row has consistent
-   vertical breathing room. */
-#tab-filters-rows {
+  padding: 10px 20px 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 .filter-bar .filter-actions-row {
-  padding-top: 14px;
-  margin-top: 6px;
+  padding-top: 8px;
   border-top: 1px dashed var(--border);
+  margin-top: 4px;
 }
 
 .filter-row {
@@ -364,14 +356,12 @@ input, select { font-family: inherit; font-size: inherit; color: inherit; }
 .filter-actions-row .filter-actions-spacer {
   flex: 1;
 }
-/* Teal-on-white Apply button for the filter bar.
-   The bg/border/hover are pinned to the light-mode teal hex values on
-   purpose — the user wants this button to look identical in both themes,
-   so we bypass the `--teal` CSS variable (which is brighter in dark mode). */
+/* Teal-on-white Apply button for light filter bar.
+   Default .btn-primary is designed for the dark header — override here. */
 .filter-actions-row .btn-apply {
-  background: #007892;
+  background: var(--teal);
   color: #fff;
-  border-color: #007892;
+  border-color: var(--teal);
   font-weight: 600;
   height: 32px;
   padding: 0 16px;
@@ -391,7 +381,7 @@ input, select { font-family: inherit; font-size: inherit; color: inherit; }
   animation: apply-pulse 1.4s ease-out infinite;
 }
 @keyframes apply-pulse {
-  0%, 100% { box-shadow: 0 1px 0 rgba(0, 60, 75, 0.1), 0 0 0 0 rgba(0, 120, 146, 0.35); }
+  0%, 100% { box-shadow: 0 1px 0 rgba(0, 60, 75, 0.1), 0 0 0 0 var(--teal-35); }
   50% { box-shadow: 0 1px 0 rgba(0, 60, 75, 0.1), 0 0 0 6px rgba(0, 120, 146, 0.0); }
 }
 /* Clear button — subtle ghost in the filter bar */
@@ -730,15 +720,6 @@ input, select { font-family: inherit; font-size: inherit; color: inherit; }
   letter-spacing: 0.06em;
   font-family: var(--font-mono);
 }
-/* Dark-mode override: `--gold-bg` is translucent (rgba …/0.14) so the chip
-   becomes unreadable — the gold vertical line bleeds right through the
-   label. Swap in an opaque surface backdrop with a gold outline so the
-   chip reads as a proper label against the divider stripe. */
-[data-theme="dark"] .tp-divider::before {
-  background: var(--surface);
-  color: var(--gold);
-  box-shadow: 0 0 0 1px var(--gold);
-}
 
 /* ============ Sort bar ============ */
 .sort-bar {
@@ -848,18 +829,8 @@ input, select { font-family: inherit; font-size: inherit; color: inherit; }
   padding: 10px 12px;
   border-bottom: 1px solid var(--divider);
   vertical-align: middle;
-  /* Clip long cell content instead of letting it bleed into neighbouring
-     cells. `max-width` is what makes ellipsis kick in under the default
-     auto layout; pair it with nowrap + hidden + ellipsis. Individual wide
-     cells (stop-cell bar tracks, etc.) can opt out via a narrower override. */
-  max-width: 320px;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
-/* Stop-cell contains a flex row with a bar-track — no truncation needed,
-   and we don't want to clip the bar's rounded edges. */
-.tbl tbody td:has(> .stop-cell) { max-width: none; overflow: visible; }
 .tbl tbody tr:last-child td { border-bottom: none; }
 .tbl tbody tr:hover td { background: var(--teal-08); }
 .tbl tbody tr.expanded td { background: var(--teal-08); }
@@ -898,41 +869,23 @@ input, select { font-family: inherit; font-size: inherit; color: inherit; }
 .stop-dash { color: var(--ink-4); }
 
 .src-chip {
-  /* inline-block (instead of inline-flex) so text-overflow: ellipsis applies
-     to the chip's label when a td clips it. The dot stays aligned via
-     inline-block + vertical-align. */
-  display: inline-block;
-  max-width: 100%;
-  vertical-align: middle;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-weight: 500;
-  line-height: 1.4;
-}
-.src-chip > .src-dot {
-  display: inline-block;
-  vertical-align: middle;
-  margin-right: 6px;
-  margin-top: -1px;
 }
 .src-dot {
   width: 8px; height: 8px; border-radius: 50%;
   flex-shrink: 0;
 }
 .src-dot.facebook { background: #1877f2; }
-.src-dot.google   { background: #ea4335; }
-.src-dot.tiktok   { background: #000; }
-.src-dot.organic  { background: var(--green); }
-.src-dot.direct   { background: var(--ink-3); }
-.src-dot.email    { background: var(--purple); }
-.src-dot.unknown  { background: var(--ink-4); }
-.src-dot.bing     { background: #0078d4; }
-/* Distinct tones so Referral/SMS/Social don't collide with
-   email (purple) / organic (green) / bing (blue) dots. */
-.src-dot.referral { background: #9b5de5; }
-.src-dot.sms      { background: #2dd4bf; }
-.src-dot.social   { background: #4f46e5; }
+.src-dot.google { background: #ea4335; }
+.src-dot.tiktok { background: #000; }
+.src-dot.organic { background: var(--green); }
+.src-dot.direct { background: var(--ink-3); }
+.src-dot.email { background: var(--purple); }
+.src-dot.unknown { background: var(--ink-4); }
+.src-dot.bing { background: #0078d4; }
 
 .expand-caret {
   color: var(--ink-4);
@@ -1027,26 +980,15 @@ tr.expanded .expand-caret { transform: rotate(90deg); color: var(--teal); }
 }
 .stop-popup .pop-actions .btn { padding: 5px 10px; font-size: 11px; }
 
-/* ============ Detail panel (full-width bottom) ============
- * `--drawer-top` is measured and set by Dashboard._updateDrawerTop() in
- * app.js — it equals the bottom edge of `.tabs-wrap` (header + tabs row).
- * The drawer fills everything below that line so the user can still see /
- * switch tabs while a detail is open. Fallback keeps it usable if the JS
- * measurement hasn't run yet. */
+/* ============ Detail panel (full-width bottom) ============ */
 #detail-container {
   position: fixed;
   left: 0; right: 0;
-  top: var(--drawer-top, 112px);
   bottom: 0;
   background: var(--surface);
   border-top: 1px solid var(--border);
-  /* Upward-facing shadow so the drawer's top edge casts a soft lift onto
-     the tabs area above it. `--shadow-lg` uses positive y-offsets and gets
-     clipped off-screen on a bottom-anchored drawer, so we override here. */
-  box-shadow:
-    0 -2px 6px rgba(19, 33, 45, 0.06),
-    0 -12px 40px rgba(19, 33, 45, 0.12);
-  transition: transform .2s ease-out, opacity .2s ease-out, visibility .2s, box-shadow .2s;
+  box-shadow: var(--shadow-lg);
+  transition: transform .2s ease-out, opacity .2s ease-out, visibility .2s;
   transform: translateY(30px);
   opacity: 0;
   visibility: hidden;
@@ -1054,11 +996,8 @@ tr.expanded .expand-caret { transform: rotate(90deg); color: var(--teal); }
   z-index: 30;
   display: flex;
   flex-direction: column;
-}
-[data-theme="dark"] #detail-container {
-  box-shadow:
-    0 -2px 8px rgba(0, 0, 0, 0.35),
-    0 -14px 46px rgba(0, 0, 0, 0.5);
+  max-height: calc(100vh - 56px);
+  height: 82vh;
 }
 #detail-container.open {
   transform: translateY(0);
@@ -1124,29 +1063,11 @@ tr.expanded .expand-caret { transform: rotate(90deg); color: var(--teal); }
 .panel-body {
   flex: 1;
   overflow: auto;
-  /* Prevent wheel / trackpad scroll from chaining out to <body> when the
-     inner content reaches its top or bottom — without this, the page behind
-     the drawer starts scrolling at the boundary. */
-  overscroll-behavior: contain;
   padding: 18px 20px 28px;
   display: flex;
   flex-direction: column;
   gap: 18px;
 }
-
-/* Lock the page while the bottom detail drawer is open. The drawer sits on
-   top of the tab content via #backdrop, so scrolling the body underneath
-   feels like a bug (the page drifts while the user tries to scroll inside
-   the drawer). Toggled by `_openPanel` / `_openDetailContainer` in app.js. */
-body.no-scroll {
-  overflow: hidden;
-  /* Keep the scrollbar gutter reserved so the page doesn't jump horizontally
-     when the drawer opens on platforms that show classic scrollbars. */
-  scrollbar-gutter: stable;
-}
-/* The backdrop fills the viewport — explicitly swallow wheel events so the
-   browser doesn't walk up and scroll <html> when the pointer is over it. */
-#backdrop.open { overscroll-behavior: contain; touch-action: none; }
 
 .cust-card {
   display: grid;
@@ -1242,11 +1163,7 @@ body.no-scroll {
 .tp-table tbody td {
   padding: 7px 10px;
   border-bottom: 1px solid var(--divider);
-  /* Same truncation policy as .tbl — see comment there. */
-  max-width: 280px;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   font-variant-numeric: tabular-nums;
 }
 .tp-table tbody tr:last-child td { border-bottom: none; }
@@ -1259,10 +1176,7 @@ body.no-scroll {
 
 /* Backdrop */
 #backdrop {
-  position: fixed;
-  /* Full viewport so the strip above the drawer (header + tabs row) is
-     dimmed with a translucent gray overlay while the drawer is open. */
-  inset: 0;
+  position: fixed; inset: 0;
   background: rgba(15,26,36,0.25);
   opacity: 0;
   visibility: hidden;
@@ -1686,613 +1600,3 @@ body.no-scroll {
   border: 1px dashed var(--divider);
   border-radius: 8px;
 }
-
-
-/* ============================================================
- * Path Stops — small additions on top of v2 base styles
- * ============================================================ */
-.attr-meta {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-.attr-summary {
-  font-size: 12px;
-  color: var(--ink-3);
-  font-variant-numeric: tabular-nums;
-}
-.attr-summary b { color: var(--ink); font-weight: 700; }
-
-/* Stop 2/3 header — layered label + value inside the clickable <th> */
-.stop-col .stop-header-btn {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  align-items: flex-start;
-  cursor: pointer;
-}
-.stop-col .stop-header-dim {
-  color: inherit;
-  font-weight: 700;
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-.stop-col .stop-header-value {
-  font-size: 11px;
-  color: var(--ink);
-  font-weight: 500;
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-transform: none;
-  letter-spacing: 0;
-}
-.stop-col .stop-header-placeholder {
-  color: var(--ink-4);
-  font-weight: 500;
-  font-size: 11px;
-  text-transform: none;
-  letter-spacing: 0;
-}
-
-.expand-empty { font-style: italic; }
-
-/* ============================================================
- * Legacy compatibility shims — class names still emitted by
- * app.js that haven't been re-skinned 1:1 to the v2 markup.
- * All values are wired through v2 tokens so they track light/dark.
- * ============================================================ */
-
-/* Tab-body visibility (managed by _showActiveTabBody/_hideActiveTabBody) */
-.tab-body { display: none; }
-.tab-body.active { display: block; }
-.tab-count {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--ink-3);
-  font-variant-numeric: tabular-nums;
-  margin-left: 2px;
-}
-.tab.active .tab-count { color: var(--teal); }
-
-/* Legacy badge aliases → v2 badge variants */
-.badge.badge-blue,          .badge-blue          { background: var(--blue-light);    color: var(--blue);    }
-.badge.badge-orange,        .badge-orange        { background: var(--orange-light);  color: var(--orange);  }
-.badge.badge-green,         .badge-green         { background: var(--green-light);   color: var(--green);   }
-.badge.badge-grey,          .badge-grey          { background: var(--surface-2);     color: var(--ink-3);   border: 1px solid var(--border); }
-.badge.badge-subscription,  .badge-subscription  { background: var(--purple-light);  color: var(--purple);  }
-.first-purchase-badge {
-  display: inline-block;
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  padding: 2px 6px;
-  border-radius: 3px;
-  background: var(--gold-bg);
-  color: var(--gold-ink);
-  margin-left: 6px;
-}
-
-/* Panel header / close (legacy wrapper still produced by _openDetailContainer) */
-.detail-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px 20px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface-2);
-  flex-shrink: 0;
-}
-.detail-close, .detail-back {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--ink-2);
-  border-radius: 6px;
-  padding: 4px 10px;
-  height: 28px;
-  font-size: 13px;
-  cursor: pointer;
-}
-.detail-close { width: 28px; padding: 0; display: grid; place-items: center; font-size: 16px; }
-.detail-close:hover, .detail-back:hover { background: var(--bg); color: var(--ink); border-color: var(--border-strong); }
-.detail-content {
-  flex: 1;
-  overflow: auto;
-  padding: 18px 20px 28px;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-.detail-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--ink);
-  letter-spacing: -0.01em;
-}
-.detail-sub {
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--ink-3);
-  margin-top: 8px;
-}
-
-/* cust-card legacy variant (with <h4><dl class="cust-grid">) — scoped via :has()
-   so it doesn't override the v2 `.cust-card` grid layout used by Journey / Customer panels. */
-.cust-card:has(> h4) {
-  padding: 14px 16px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  display: block;
-}
-.cust-card > h4 {
-  margin: 0 0 10px;
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--ink-3);
-}
-.cust-grid {
-  margin: 0;
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  column-gap: 14px;
-  row-gap: 6px;
-  font-size: 12.5px;
-}
-.cust-grid dt { color: var(--ink-3); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
-.cust-grid dd { margin: 0; color: var(--ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-
-/* Route table legacy (overridden by .jp-list v2 when re-skinned) */
-.route-row {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  display: flex;
-  overflow: hidden;
-  margin-bottom: 10px;
-  transition: border-color .15s, box-shadow .15s;
-}
-.route-row:hover { border-color: var(--teal-35); box-shadow: var(--shadow-sm); }
-.route-fp {
-  width: 168px;
-  flex-shrink: 0;
-  padding: 12px 14px;
-  background: var(--surface-2);
-  border-right: 1px solid var(--divider);
-  cursor: pointer;
-  font-size: 11px;
-  color: var(--ink-2);
-  transition: background .15s;
-}
-.route-fp:hover { background: var(--teal-08); }
-.route-cells {
-  flex: 1;
-  padding: 10px 14px;
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  align-items: stretch;
-}
-.route-cells::-webkit-scrollbar { height: 8px; }
-.route-cells::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
-.route-cell {
-  min-width: 210px;
-  max-width: 260px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  padding: 8px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  font-size: 11px;
-  flex-shrink: 0;
-  cursor: pointer;
-  transition: box-shadow .15s, transform .15s;
-}
-.route-cell:hover { box-shadow: 0 0 0 2px var(--teal-35); transform: translateY(-1px); }
-.route-cell.click       { border-color: #cfe2ff; background: linear-gradient(180deg, #eef3f8, var(--surface)); }
-.route-cell.conv        { border-color: #fde6c6; background: linear-gradient(180deg, #f5ede0, var(--surface)); }
-.route-cell.order       { border-color: #bfe7d1; background: linear-gradient(180deg, #e8f2ec, var(--surface)); }
-.route-cell.order.subscription { border-color: #ddd3f7; background: linear-gradient(180deg, #ede8f3, var(--surface)); }
-.route-cell.first-purchase { box-shadow: 0 0 0 2px var(--gold); border-color: var(--gold); }
-.route-cell.pre-purchase { background: linear-gradient(180deg, #e6eef6, var(--surface)); }
-.route-cell.sub-action { opacity: 0.45; }
-[data-theme="dark"] .route-cell.click       { border-color: rgba(106,164,255,0.28); background: linear-gradient(180deg, rgba(106,164,255,0.08), var(--surface)); }
-[data-theme="dark"] .route-cell.conv        { border-color: rgba(240,162,74,0.28); background: linear-gradient(180deg, rgba(240,162,74,0.08), var(--surface)); }
-[data-theme="dark"] .route-cell.order       { border-color: rgba(78,203,140,0.28);  background: linear-gradient(180deg, rgba(78,203,140,0.08), var(--surface)); }
-[data-theme="dark"] .route-cell.order.subscription { border-color: rgba(167,139,250,0.32); background: linear-gradient(180deg, rgba(167,139,250,0.10), var(--surface)); }
-[data-theme="dark"] .route-cell.pre-purchase { background: linear-gradient(180deg, rgba(106,164,255,0.06), var(--surface)); }
-.route-cell-type {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  padding: 2px 6px;
-  border-radius: 3px;
-  text-transform: uppercase;
-  width: fit-content;
-  margin-bottom: 2px;
-}
-.route-cell-type.click       { background: var(--blue-light);   color: var(--blue);   }
-.route-cell-type.conv        { background: var(--orange-light); color: var(--orange); }
-.route-cell-type.order       { background: var(--green-light);  color: var(--green);  }
-.route-cell-type.order.subscription { background: var(--purple-light); color: var(--purple); }
-.route-cell-kv {
-  display: flex;
-  gap: 5px;
-  font-size: 11px;
-  line-height: 1.3;
-  align-items: baseline;
-}
-.route-cell-kv .kv-label {
-  color: var(--ink-4);
-  min-width: 56px;
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  flex-shrink: 0;
-}
-.route-cell-kv .kv-val {
-  color: var(--ink);
-  font-weight: 500;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.route-cell-context {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  font-size: 10px;
-  color: var(--ink-4);
-  margin-top: 3px;
-  border-top: 1px dashed var(--divider);
-  padding-top: 4px;
-}
-.route-cell-context span { white-space: nowrap; }
-.route-cell-date {
-  font-size: 10px;
-  color: var(--ink-4);
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  margin-top: 4px;
-}
-.route-cell-more {
-  display: grid;
-  place-items: center;
-  min-width: 110px;
-  max-width: 140px;
-  background: var(--surface-2);
-  border: 1px dashed var(--border-strong);
-  color: var(--ink-3);
-  font-weight: 600;
-  font-size: 11px;
-}
-.route-cell-more:hover { background: var(--teal-08); color: var(--teal); border-color: var(--teal-35); }
-.route-customer { color: var(--teal); font-weight: 600; font-size: 12px; margin-top: 4px; padding-top: 4px; border-top: 1px dashed var(--divider); }
-.route-customer a:hover { text-decoration: underline; }
-.route-meta { color: var(--ink-3); font-size: 11px; font-variant-numeric: tabular-nums; font-family: var(--font-mono); line-height: 1.35; }
-.route-sort-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-  font-size: 12px;
-  color: var(--ink-3);
-}
-.route-sort-bar label { color: var(--ink-2); font-weight: 500; }
-.route-sort-bar select, .route-sort-bar button {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--ink);
-  border-radius: 5px;
-  padding: 4px 8px;
-  font-size: 12px;
-  cursor: pointer;
-}
-.route-sort-bar button:hover { border-color: var(--border-strong); }
-
-/* Table legacy rows (subscription/first-purchase/pre-purchase/sub-action) */
-.tp-table tbody tr.pre-purchase-row td,
-.tp-table tbody tr.pre td          { background: var(--blue-light); }
-.tp-table tbody tr.first-purchase-row td,
-.tp-table tbody tr.first td        { background: var(--gold-bg) !important; }
-.tp-table tbody tr.sub-action-row td,
-.tp-table tbody tr.muted td        { opacity: 0.55; }
-.tp-table tbody tr.subscription-row td { background: rgba(167,139,250,0.06); }
-[data-theme="dark"] .tp-table tbody tr.subscription-row td { background: rgba(167,139,250,0.08); }
-
-/* Sort indicators on table headers */
-th.sort-asc::after  { content: ' ↑'; color: var(--teal); font-weight: 600; }
-th.sort-desc::after { content: ' ↓'; color: var(--teal); font-weight: 600; }
-.tbl thead th.sort-asc, .tbl thead th.sort-desc,
-.tp-table thead th.sort-asc, .tp-table thead th.sort-desc { color: var(--teal); }
-
-/* Pager */
-.pager {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px 2px 0;
-  font-size: 12px;
-  color: var(--ink-3);
-}
-.pager button {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--ink-2);
-  border-radius: 5px;
-  padding: 5px 10px;
-  font-size: 11.5px;
-  font-weight: 500;
-  cursor: pointer;
-}
-.pager button:hover:not(:disabled) { border-color: var(--teal-35); color: var(--teal); background: var(--teal-08); }
-.pager button:disabled { opacity: 0.4; cursor: not-allowed; }
-
-/* Data status banner */
-.data-status {
-  padding: 10px 14px;
-  margin: 10px 20px 0;
-  background: var(--teal-08);
-  color: var(--teal);
-  border: 1px solid var(--teal-18);
-  border-radius: 6px;
-  font-size: 12.5px;
-}
-.data-status-error { background: var(--orange-light); color: var(--orange); border-color: var(--orange); }
-.csv-upload-label {
-  display: inline-block;
-  margin-top: 6px;
-  padding: 6px 10px;
-  background: var(--teal);
-  color: #fff;
-  border-radius: 5px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.csv-upload-label input { display: none; }
-
-/* Stops table extras (bars + expansion + popup) */
-.stops-bar { display: inline-block; height: 6px; border-radius: 3px; margin-right: 8px; vertical-align: middle; }
-.stops-bar-1 { background: var(--teal); }
-.stops-bar-2 { background: var(--orange); }
-.stops-bar-3 { background: var(--green); }
-.stops-row { cursor: pointer; }
-.stops-row-expanded td { background: var(--teal-08); }
-.stops-name-cell { font-weight: 600; }
-.stops-expansion-row td {
-  padding: 0 !important;
-  background: var(--surface-2) !important;
-  border-bottom: 1px solid var(--border) !important;
-}
-.stops-expansion-wrap { padding: 14px; }
-
-.stop-header-cell { cursor: pointer; }
-.stop-header-cell[data-stop="2"] { border-top: 3px solid var(--orange); }
-.stop-header-cell[data-stop="3"] { border-top: 3px solid var(--green); }
-.stop-header-cell:hover { background: var(--teal-08); }
-.stop-header-btn { display: flex; flex-direction: column; gap: 2px; }
-.stop-header-dim { color: var(--teal); font-weight: 600; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; }
-.stop-header-value {
-  font-size: 11px;
-  color: var(--ink);
-  font-weight: 500;
-  max-width: 180px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-transform: none;
-  letter-spacing: 0;
-}
-.stop-header-placeholder { color: var(--ink-4); font-weight: 500; font-size: 11px; text-transform: none; letter-spacing: 0; }
-
-.stop-popup-title {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--ink-3);
-  font-weight: 700;
-  margin-bottom: 8px;
-}
-.stop-popup-label {
-  display: block;
-  font-size: 10.5px;
-  font-weight: 600;
-  color: var(--ink-3);
-  margin-bottom: 3px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.stop-popup-select {
-  width: 100%;
-  padding: 6px 8px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: var(--surface);
-  color: var(--ink);
-  font-size: 12px;
-}
-.stop-popup-clear {
-  margin-top: 10px;
-  width: 100%;
-  padding: 6px 10px;
-  background: transparent;
-  color: var(--ink-3);
-  border: 1px dashed var(--border);
-  border-radius: 5px;
-  font-size: 11.5px;
-  cursor: pointer;
-}
-.stop-popup-clear:hover { color: var(--ink); border-color: var(--border-strong); background: var(--bg); }
-
-/* Filter bar per-tab rows (.tab-filter-row) — alternate legacy markup.
-   (The `#tab-filters` padding shim was removed: it's the same element as
-   `.filter-bar` and was stripping the vertical padding we want there.) */
-.tab-filter-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-}
-.tab-filter-row .tf-field,
-.tab-filter-row .tf-operator,
-.tab-filter-row .tf-value,
-#tab-filters select,
-#tab-filters input {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 5px 9px;
-  font-size: 12px;
-  color: var(--ink);
-  height: 28px;
-}
-.tab-filter-row input:focus, .tab-filter-row select:focus {
-  outline: none;
-  border-color: var(--teal);
-  box-shadow: 0 0 0 3px var(--teal-12);
-}
-.btn-remove-filter {
-  background: transparent;
-  border: none;
-  color: var(--ink-3);
-  width: 22px; height: 22px;
-  border-radius: 4px;
-  display: grid; place-items: center;
-  padding: 0;
-  cursor: pointer;
-  font-size: 16px;
-  line-height: 1;
-}
-.btn-remove-filter:hover { background: var(--bg); color: var(--ink); }
-
-.btn-add-filter {
-  background: transparent;
-  color: var(--teal);
-  border: 1px dashed var(--teal-35);
-  border-radius: 6px;
-  padding: 6px 12px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  height: 32px;
-}
-.btn-add-filter:hover { background: var(--teal-08); border-color: var(--teal); }
-
-.btn-apply, #btn-apply-filters {
-  background: #007892;
-  color: #fff;
-  border: 1px solid #007892;
-  border-radius: 6px;
-  padding: 0 16px;
-  height: 32px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  box-shadow: 0 1px 0 rgba(0,60,75,0.1), 0 2px 4px -2px rgba(0,60,75,0.2);
-}
-.btn-apply:hover, #btn-apply-filters:hover { background: #006578; border-color: #006578; }
-.btn-apply.is-pending, #btn-apply-filters.is-pending {
-  animation: apply-pulse 1.4s ease-out infinite;
-}
-.btn-clear {
-  background: transparent;
-  color: var(--ink-3);
-  border: 1px solid transparent;
-  border-radius: 6px;
-  padding: 0 12px;
-  height: 32px;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-}
-.btn-clear:hover { background: rgba(0,60,75,0.05); color: var(--ink); }
-
-/* Funnel legacy stages (.funnel-stage with .s-click / .s-purchase etc.) */
-.funnel-stage-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--teal-600);
-  font-weight: 600;
-}
-.funnel-stage-count {
-  font-size: 17px;
-  font-weight: 700;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
-}
-.funnel-stage.s-click,
-.funnel-stage.s-viewcontent,
-.funnel-stage.s-addtocart,
-.funnel-stage.s-initiatecheckout,
-.funnel-stage.s-purchase,
-.funnel-stage.s-subscription,
-.funnel-stage.s-recurring {
-  background: var(--teal-08);
-  border: 1px solid var(--teal-18);
-}
-.funnel-arrow-rate { color: var(--ink-3); font-size: 11px; }
-
-/* Column resizer & highlight bits from app.js */
-.col-rz {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 5px;
-  height: 100%;
-  cursor: col-resize;
-  user-select: none;
-  background: transparent;
-}
-.col-rz:hover { background: var(--teal-35); }
-.col-highlight { background: var(--teal-08) !important; }
-
-/* Touchpoint-field configurator (showTpFieldConfigurator) */
-.tp-cfg-back {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--ink-2);
-  border-radius: 5px;
-  padding: 6px 12px;
-  font-size: 12px;
-  cursor: pointer;
-  margin-bottom: 12px;
-}
-.tp-cfg-back:hover { border-color: var(--teal); color: var(--teal); }
-.tp-cfg-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.tp-cfg-header h3 { margin: 0; font-size: 15px; color: var(--ink); }
-.tp-cfg-actions { display: flex; gap: 6px; }
-.tp-cfg-actions button {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--ink-2);
-  border-radius: 5px;
-  padding: 5px 10px;
-  font-size: 11.5px;
-  cursor: pointer;
-}
-.tp-cfg-actions button:hover { border-color: var(--teal); color: var(--teal); }
-.tp-cfg-hint { font-size: 12px; color: var(--ink-3); margin: 0 0 12px; }
-.tp-cfg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
-.tp-cfg-group { border: 1px solid var(--divider); border-radius: 8px; padding: 10px 12px; background: var(--surface); }
-.tp-cfg-group-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-3); font-weight: 700; margin-bottom: 8px; }
-.tp-cfg-item { display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: 12px; color: var(--ink); }
-.tp-cfg-item input { accent-color: var(--teal); }
