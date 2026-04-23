@@ -275,16 +275,20 @@
       });
       pop.querySelectorAll('.dr-day[data-day]').forEach(el => {
         if (el.classList.contains('dr-day-out')) return;
-        el.addEventListener('click', () => {
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
           const [y, mo, d] = el.dataset.day.split('-').map(Number);
           handleDayClick(new Date(y, mo-1, d));
         });
         el.addEventListener('mouseenter', () => {
           const [y, mo, d] = el.dataset.day.split('-').map(Number);
-          hoverDate = new Date(y, mo-1, d);
+          const next = new Date(y, mo-1, d);
+          if (hoverDate && sameDay(hoverDate, next)) return;
+          hoverDate = next;
           updateRangeHighlight();
         });
         el.addEventListener('mouseleave', () => {
+          if (hoverDate === null) return;
           hoverDate = null;
           updateRangeHighlight();
         });
@@ -317,70 +321,33 @@
       position();
     }
 
+    // Toggle range-highlight classes on the existing day buttons.
+    // IMPORTANT: do NOT rebuild `.dr-days` innerHTML here. Hovering fires
+    // `mouseenter` repeatedly, and if we tore down + recreated the buttons on
+    // every hover, any in-flight `mousedown` would lose its target before
+    // `mouseup` fires, so the browser never dispatches a `click` — the bug
+    // where day selection silently did nothing while hover feedback worked.
     function updateRangeHighlight(){
-      // Lightweight: just re-render days portion. For simplicity, re-render all.
-      // (cheap — max 84 day cells)
-      const focusSnapshot = { from, to, focus, hoverDate };
-      // Save scroll positions — not needed; popover is small.
-      // Rebuild day cells only for both calendars
-      [['left', leftView], ['right', rightView]].forEach(([side, view]) => {
-        const container = pop.querySelector(`[data-cal="${side}"] .dr-days`);
-        if (!container) return;
-        container.innerHTML = buildCalendarDaysOnly(view, focusSnapshot);
-        // reattach
-        container.querySelectorAll('.dr-day[data-day]').forEach(el => {
-          if (el.classList.contains('dr-day-out')) return;
-          el.addEventListener('click', () => {
-            const [y, mo, d] = el.dataset.day.split('-').map(Number);
-            handleDayClick(new Date(y, mo-1, d));
-          });
-          el.addEventListener('mouseenter', () => {
-            const [y, mo, d] = el.dataset.day.split('-').map(Number);
-            hoverDate = new Date(y, mo-1, d);
-            updateRangeHighlight();
-          });
-          el.addEventListener('mouseleave', () => {
-            hoverDate = null;
-            updateRangeHighlight();
-          });
-        });
-      });
-    }
+      const effectiveTo   = hoverDate && focus === 'to'   && hoverDate >= from ? hoverDate : to;
+      const effectiveFrom = hoverDate && focus === 'from' && hoverDate <= to   ? hoverDate : from;
 
-    function buildCalendarDaysOnly(viewDate, snap){
-      const y = viewDate.getFullYear();
-      const m = viewDate.getMonth();
-      const first = new Date(y, m, 1);
-      const offset = (first.getDay() + 6) % 7;
-      const lastDay = new Date(y, m+1, 0).getDate();
-      const prevLastDay = new Date(y, m, 0).getDate();
-      const cells = [];
-      for (let i = offset - 1; i >= 0; i--) cells.push({ date: new Date(y, m-1, prevLastDay - i), out: true });
-      for (let d = 1; d <= lastDay; d++) cells.push({ date: new Date(y, m, d), out: false });
-      while (cells.length < 42) { const last = cells[cells.length-1].date; cells.push({ date: addDays(last, 1), out: true }); }
+      pop.querySelectorAll('.dr-day[data-day]').forEach(el => {
+        const [y, mo, d] = el.dataset.day.split('-').map(Number);
+        const cd = new Date(y, mo-1, d);
+        el.classList.remove('dr-in-range', 'dr-range-start', 'dr-range-end', 'dr-single');
+        if (el.classList.contains('dr-day-out')) return;
 
-      const hv = snap.hoverDate;
-      const effectiveTo = hv && snap.focus === 'to' && hv >= snap.from ? hv : snap.to;
-      const effectiveFrom = hv && snap.focus === 'from' && hv <= snap.to ? hv : snap.from;
-
-      return cells.map(c => {
-        const cls = ['dr-day'];
-        if (c.out) cls.push('dr-day-out');
-        if (!c.out) {
-          if (sameDay(c.date, today)) cls.push('dr-day-today');
-          const inRange = c.date >= effectiveFrom && c.date <= effectiveTo;
-          const isStart = sameDay(c.date, effectiveFrom);
-          const isEnd = sameDay(c.date, effectiveTo);
-          if (inRange && !isStart && !isEnd) cls.push('dr-in-range');
-          if (isStart && isEnd) cls.push('dr-single');
-          else {
-            if (isStart) cls.push('dr-range-start');
-            if (isEnd) cls.push('dr-range-end');
-          }
+        const inRange = cd >= effectiveFrom && cd <= effectiveTo;
+        const isStart = sameDay(cd, effectiveFrom);
+        const isEnd   = sameDay(cd, effectiveTo);
+        if (isStart && isEnd) {
+          el.classList.add('dr-single');
+        } else {
+          if (inRange && !isStart && !isEnd) el.classList.add('dr-in-range');
+          if (isStart) el.classList.add('dr-range-start');
+          if (isEnd)   el.classList.add('dr-range-end');
         }
-        const iso = c.date.getFullYear()+'-'+pad(c.date.getMonth()+1)+'-'+pad(c.date.getDate());
-        return `<button type="button" class="${cls.join(' ')}" data-day="${iso}" ${c.out?'tabindex="-1"':''}><span class="dr-day-num">${c.date.getDate()}</span></button>`;
-      }).join('');
+      });
     }
 
     function position(){

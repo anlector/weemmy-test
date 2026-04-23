@@ -1137,6 +1137,7 @@ class Dashboard {
 
     // Updates tab count badges
     renderKPIs() {
+        document.getElementById('tc-attribution').textContent = '('+this.journeys.length+')';
         document.getElementById('tc-orders').textContent = '('+this.fOrders.length+')';
         document.getElementById('tc-customers').textContent = '('+this.customers.length+')';
         document.getElementById('tc-route').textContent = '('+this.journeys.length+')';
@@ -1297,43 +1298,117 @@ class Dashboard {
 
     // Side panel: shows order details + customer info + journey timeline for that fingerprint
     showOrder(oid) {
-        const order = this.fOrders.find(o=>o.oid===oid);
-        if(!order) return;
+        const order = this.fOrders.find(o => o.oid === oid);
+        if (!order) return;
         this._trackPanelView('showOrder', [oid]);
-        // Get journey for this order
-        const touchpoints = order.fp ? this.raw.filter(r=>r.fp===order.fp) : [];
-        touchpoints.sort((a,b)=>this.compareDates(a.dt, b.dt));
+        const esc = this._escHtml.bind(this);
 
-        let html = `<div class="detail-title">Order #${order.oid}</div>`;
-        html += '<div class="cust-card"><h4>Order Details</h4><dl class="cust-grid">';
-        html += this.dlRow('Value','$'+(order.pr||0).toFixed(2));
-        html += this.dlRow('Status',order.st);
-        html += this.dlRow('Date',this.fmtDate(order.dt));
-        const appLabel = order.app || '';
-        const subTag = this.isSubscription(order) ? ' <span class="badge badge-subscription">Subscription</span>' : '';
-        html += this.dlRow('App', appLabel + subTag);
-        html += this.dlRow('Ref. Campaign',order.rcmp);
-        html += this.dlRow('City',order.ci);
-        html += this.dlRow('State',order.co);
-        html += this.dlRow('Currency',order.cur);
-        if(order.fp) html += this.dlRow('Fingerprint',`<a class="xlink" onclick="D.navigateToFingerprint('${order.fp}')">${order.fp}</a>`);
-        html += '</dl></div>';
-        html += '<div class="cust-card"><h4>Customer</h4><dl class="cust-grid">';
-        const custNameLink = order.cid ? `<a class="xlink" onclick="D.navigateToCustomer('${order.cid}')">${order.nm||''}</a>` : (order.nm||'');
-        const custEmailLink = order.cid ? `<a class="xlink" onclick="D.navigateToCustomer('${order.cid}')">${order.em||''}</a>` : (order.em||'');
-        html += this.dlRow('Name', custNameLink);
-        html += this.dlRow('Email', custEmailLink);
-        html += this.dlRow('Customer ID', order.cid ? `<a class="xlink" onclick="D.navigateToCustomer('${order.cid}')">${order.cid}</a>` : '');
-        html += this.dlRow('First Source',order.fsrc);
-        html += this.dlRow('Last Source',order.lsrc);
-        html += '</dl></div>';
-        // Journey timeline
-        if(touchpoints.length) {
-            const orderJourney = order.fp ? this.journeys.find(j => j.fp === order.fp) : null;
-            html += `<div class="detail-sub">Journey Path (${touchpoints.length} touchpoints)</div>`;
-            html += this.renderTouchpointTable(order.fp, touchpoints, orderJourney ? orderJourney.firstOrderTs : null);
+        // Journey touchpoints for this order's fingerprint (for timeline)
+        const touchpoints = order.fp ? this.raw.filter(r => r.fp === order.fp) : [];
+        touchpoints.sort((a, b) => this.compareDates(a.dt, b.dt));
+        const orderJourney = order.fp ? this.journeys.find(j => j.fp === order.fp) : null;
+
+        const isSub = this.isSubscription(order);
+        const kind = isSub ? 'Subscription' : 'Order';
+        const stUp = order.st ? String(order.st).toUpperCase() : '';
+        const stVariant = stUp === 'FULFILLED' ? 'purchase' : stUp === 'PENDING' ? 'action' : 'subscription';
+
+        // ─── panel-head ─────────────────────────────────────────────────
+        const head = `
+            ${this._panelControlsV2()}
+            <div class="panel-title">
+                ${esc(kind)}
+                <span class="pid">#${esc(order.oid || '')}</span>
+                ${isSub ? '<span class="badge subscription">SUB</span>' : ''}
+            </div>
+            <div class="panel-meta">
+                ${order.pr != null && order.pr !== '' ? `<div class="stat"><b style="color:var(--green)">$${Number(order.pr).toFixed(2)}</b><span>Value</span></div>` : ''}
+                ${order.st ? `<div class="stat"><b><span class="badge ${stVariant}" style="font-size:10px;padding:2px 6px;">${esc(order.st)}</span></b><span>Status</span></div>` : ''}
+                ${order.dt ? `<div class="stat"><b>${esc(this.fmtDate(order.dt))}</b><span>Date</span></div>` : ''}
+                ${order.app ? `<div class="stat"><b>${esc(order.app)}</b><span>App</span></div>` : ''}
+                ${order.nm ? `<div class="stat"><b>${esc(order.nm)}</b><span>Customer</span></div>` : ''}
+            </div>`;
+
+        // ─── kv-grid rows ───────────────────────────────────────────────
+        const isNonEmpty = (v) => {
+            if (v === undefined || v === null) return false;
+            if (typeof v === 'string') return v.trim() !== '';
+            return true;
+        };
+        const kvRow = (label, valueHtml, isMono) =>
+            `<div class="kv-row"><div class="kv-k">${esc(label)}</div><div class="kv-v${isMono ? ' mono' : ''}">${valueHtml}</div></div>`;
+
+        const srcChip = (v) => `<span class="src-chip"><span class="src-dot ${this.canonicalizeSource(v)}"></span>${esc(v)}</span>`;
+
+        let rows = '';
+        if (isNonEmpty(order.dt)) rows += kvRow('Date', esc(this.fmtDate(order.dt)), true);
+        if (isNonEmpty(order.pr)) rows += kvRow('Value', `<span style="color:var(--green);font-weight:700;">$${Number(order.pr).toFixed(2)}</span>`, true);
+        if (isNonEmpty(order.st)) rows += kvRow('Status', `<span class="badge ${stVariant}">${esc(order.st)}</span>`, false);
+        if (isNonEmpty(order.app)) rows += kvRow('App', isSub ? `${esc(order.app)} <span class="badge subscription">SUB</span>` : esc(order.app), false);
+        if (isNonEmpty(order.cur)) rows += kvRow('Currency', esc(order.cur), true);
+        // Attribution / campaign
+        if (isNonEmpty(order.rcmp)) rows += kvRow('Ref. Campaign', esc(order.rcmp), false);
+        if (isNonEmpty(order.fsrc)) rows += kvRow('First Source', srcChip(order.fsrc), false);
+        if (isNonEmpty(order.lsrc)) rows += kvRow('Last Source', srcChip(order.lsrc), false);
+        // Geo
+        if (isNonEmpty(order.ci)) rows += kvRow('City', esc(order.ci), false);
+        if (isNonEmpty(order.co)) rows += kvRow('State', esc(order.co), false);
+        // Identities
+        if (isNonEmpty(order.nm)) {
+            const nameHtml = order.cid
+                ? `<a class="xlink" onclick="D.navigateToCustomer('${esc(order.cid)}')">${esc(order.nm)}</a>`
+                : esc(order.nm);
+            rows += kvRow('Customer Name', nameHtml, false);
         }
-        this._openDetailContainer(html);
+        if (isNonEmpty(order.em)) {
+            const emHtml = order.cid
+                ? `<a class="xlink" onclick="D.navigateToCustomer('${esc(order.cid)}')">${esc(order.em)}</a>`
+                : esc(order.em);
+            rows += kvRow('Email', emHtml, false);
+        }
+        if (isNonEmpty(order.cid)) rows += kvRow('Customer ID', `<a class="xlink mono" onclick="D.navigateToCustomer('${esc(order.cid)}')">${esc(order.cid)}</a>`, true);
+        if (isNonEmpty(order.fp)) rows += kvRow('Fingerprint', `<a class="xlink mono" onclick="D.showJourneyPathsTable('${esc(order.fp)}')" title="${esc(order.fp)}">${esc(order.fp)}</a>`, true);
+
+        // ─── related-links ──────────────────────────────────────────────
+        const relatedLinks = [];
+        if (order.cid) {
+            const custLabel = order.nm || order.em || order.cid;
+            relatedLinks.push(`<a class="xlink" onclick="D.navigateToCustomer('${esc(order.cid)}')">↗ Open customer · ${esc(custLabel)}</a>`);
+        }
+        if (order.fp) {
+            relatedLinks.push(`<a class="xlink" onclick="D.showJourneyPathsTable('${esc(order.fp)}')">↗ Open journey path${orderJourney ? ` (${orderJourney.count} touchpoints)` : ''}</a>`);
+            relatedLinks.push(`<a class="xlink" onclick="D.navigateToFingerprint('${esc(order.fp)}')">↗ Show fingerprint in Journey Paths</a>`);
+        }
+
+        // ─── panel-body ─────────────────────────────────────────────────
+        let body = `
+            <div class="section-head">
+                <h3>${esc(kind)} details</h3>
+                <span class="muted">All recorded fields for this order</span>
+            </div>
+            <div class="kv-grid">${rows}</div>`;
+
+        if (relatedLinks.length) {
+            body += `
+            <div class="section-head" style="margin-top:4px;">
+                <h3>Related</h3>
+                <span class="muted">Jump to context</span>
+            </div>
+            <div class="related-links">${relatedLinks.join('')}</div>`;
+        }
+
+        if (touchpoints.length) {
+            body += `
+            <div>
+                <div class="section-head">
+                    <h3>Journey Path</h3>
+                    <span class="muted">${touchpoints.length} touchpoint${touchpoints.length === 1 ? '' : 's'} for this fingerprint</span>
+                </div>
+                ${this.renderTouchpointTable(order.fp, touchpoints, orderJourney ? orderJourney.firstOrderTs : null)}
+            </div>`;
+        }
+
+        this._openPanel({ head, body });
         makePanelResizable();
     }
 
@@ -1836,7 +1911,12 @@ class Dashboard {
             const v = r[k];
             if (!isNonEmpty(v)) return;
             if (!this.isFieldVisible(k)) return;
-            const label = Dashboard.LABEL_MAP[k] || k;
+            let label = Dashboard.LABEL_MAP[k];
+            if (!label) {
+                if (k.startsWith('conversion_')) label = k.slice(11);
+                else if (k.startsWith('click_')) label = k.slice(6);
+                else label = k;
+            }
             rows += kvRow(label, fmtField(k, v), monoKeys.has(k));
             renderedCount++;
         });
@@ -2625,6 +2705,10 @@ class Dashboard {
         const routeData = this.filteredJourneys || this.journeys || [];
         const ordersData = this.filteredOrders || this.fOrders || [];
         const custData = this.filteredCustomers || this.customers || [];
+        // Path Stops shares the journey scope with Journey Paths — both views
+        // operate on the same per-fingerprint grouping, just presented
+        // differently, so they track the same count.
+        document.getElementById('tc-attribution').textContent = '(' + routeData.length + ')';
         document.getElementById('tc-route').textContent = '(' + routeData.length + ')';
         document.getElementById('tc-orders').textContent = '(' + ordersData.length + ')';
         document.getElementById('tc-customers').textContent = '(' + custData.length + ')';
